@@ -1,0 +1,273 @@
+Lab 3: Configure Automation Controller After Installation
+Objectives
+By the end of this lab, you will be able to:
+
+• Configure authentication methods (LDAP or SSO) for the Automation Controller • Create and manage user roles with appropriate permissions • Integrate the Automation Controller with Private Automation Hub • Understand the security and access control mechanisms in Ansible Automation Platform • Implement best practices for user management and system integration
+
+Prerequisites
+Before starting this lab, you should have:
+
+• Basic understanding of Linux command line operations • Familiarity with Ansible concepts and terminology • Knowledge of LDAP authentication principles • Understanding of user roles and permissions concepts • Completed Lab 1 and Lab 2 (Automation Controller installation) • Access to a web browser for GUI configuration
+
+Lab Environment
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own VM or install software.
+
+Your lab environment includes: • Red Hat Enterprise Linux 9 server with Automation Controller installed • Private Automation Hub instance • LDAP server for authentication testing • All necessary network configurations pre-configured
+
+Task 1: Set Up Authentication (LDAP Integration)
+Subtask 1.1: Access the Automation Controller Web Interface
+Open your web browser and navigate to the Automation Controller URL:
+
+https://your-controller-hostname
+Log in using the default admin credentials created during installation:
+
+Username: admin
+Password: your-admin-password
+Verify successful login by confirming you can see the Automation Controller dashboard.
+
+Subtask 1.2: Configure LDAP Authentication Settings
+Navigate to Settings by clicking on the gear icon in the top-right corner of the interface.
+
+Select Authentication from the left sidebar menu.
+
+Click on LDAP to configure LDAP authentication settings.
+
+Configure the LDAP Server Connection by filling in the following fields:
+
+{
+  "AUTH_LDAP_SERVER_URI": "ldap://your-ldap-server:389",
+  "AUTH_LDAP_BIND_DN": "cn=admin,dc=example,dc=com",
+  "AUTH_LDAP_BIND_PASSWORD": "your-ldap-password",
+  "AUTH_LDAP_USER_SEARCH": [
+    "ou=users,dc=example,dc=com",
+    "SCOPE_SUBTREE",
+    "(uid=%(user)s)"
+  ]
+}
+Configure User Attribute Mapping:
+
+{
+  "AUTH_LDAP_USER_ATTR_MAP": {
+    "first_name": "givenName",
+    "last_name": "sn",
+    "email": "mail"
+  }
+}
+Set up Group Mapping for automatic role assignment:
+
+{
+  "AUTH_LDAP_GROUP_SEARCH": [
+    "ou=groups,dc=example,dc=com",
+    "SCOPE_SUBTREE",
+    "(objectClass=groupOfNames)"
+  ],
+  "AUTH_LDAP_GROUP_TYPE": "GroupOfNamesType"
+}
+Subtask 1.3: Test LDAP Authentication
+Save the LDAP configuration by clicking the Save button.
+
+Test the connection by clicking Test next to the LDAP settings.
+
+Verify successful connection by checking for a green checkmark or success message.
+
+Create a test login by opening a new incognito/private browser window and attempting to log in with LDAP credentials.
+
+Task 2: Create User Roles and Assign Permissions
+Subtask 2.1: Understanding Default Roles
+Navigate to Access Management by clicking on Access in the left sidebar.
+
+Click on Roles to view the default system roles:
+
+System Administrator: Full system access
+System Auditor: Read-only access to all resources
+Normal User: Basic user access
+Review role permissions by clicking on each role to understand their capabilities.
+
+Subtask 2.2: Create Custom User Roles
+Create a new custom role by clicking the Add button in the Roles section.
+
+Configure the "Project Manager" role:
+
+Name: Project Manager
+Description: Can manage projects and job templates
+Assign specific permissions to the Project Manager role:
+
+Permissions to assign:
+- Project: Add, Change, Delete
+- Job Template: Add, Change, Delete, Execute
+- Inventory: View
+- Credential: View (for assigned credentials only)
+Create an "Operator" role:
+
+Name: Operator
+Description: Can execute jobs but not modify configurations
+Permissions:
+- Job Template: Execute, View
+- Job: View
+- Inventory: View
+Save both custom roles by clicking Save for each.
+
+Subtask 2.3: Create and Manage Users
+Navigate to Users by clicking on Users in the Access section.
+
+Add a new user by clicking the Add button:
+
+Username: project_manager_1
+Email: pm1@example.com
+First Name: John
+Last Name: Manager
+Password: SecurePass123!
+Create an operator user:
+
+Username: operator_1
+Email: op1@example.com
+First Name: Jane
+Last Name: Operator
+Password: SecurePass456!
+Assign roles to users:
+
+Select project_manager_1 and assign the Project Manager role
+Select operator_1 and assign the Operator role
+Subtask 2.4: Configure Team-Based Access
+Navigate to Teams in the Access section.
+
+Create a new team:
+
+Name: Development Team
+Description: Development and testing team
+Organization: Default
+Add users to the team:
+
+Add project_manager_1 as a team member
+Add operator_1 as a team member
+Assign team permissions to specific resources (projects, inventories, etc.).
+
+Task 3: Integrate with Private Automation Hub
+Subtask 3.1: Configure Automation Hub Connection
+Navigate to Settings and select Jobs from the left sidebar.
+
+Scroll to the Automation Hub section and configure the following settings:
+
+{
+  "GALAXY_SERVER_LIST": [
+    {
+      "name": "Private Automation Hub",
+      "url": "https://your-automation-hub-hostname/api/galaxy/",
+      "auth_url": "https://your-automation-hub-hostname/api/galaxy/v3/auth/",
+      "token": "your-automation-hub-token"
+    }
+  ]
+}
+Obtain the API token from your Private Automation Hub:
+
+Log into your Automation Hub interface
+Navigate to Collections → API Token
+Copy the token value
+Subtask 3.2: Configure Collection Downloads
+Set the primary Galaxy server to your Private Automation Hub:
+
+{
+  "PRIMARY_GALAXY_URL": "https://your-automation-hub-hostname/api/galaxy/",
+  "PRIMARY_GALAXY_TOKEN": "your-automation-hub-token",
+  "PRIMARY_GALAXY_USERNAME": "",
+  "PRIMARY_GALAXY_PASSWORD": ""
+}
+Configure collection path for automatic downloads:
+
+{
+  "COLLECTIONS_PATHS": [
+    "/var/lib/awx/collections"
+  ]
+}
+Save the configuration and test the connection.
+
+Subtask 3.3: Test Integration with Collection Sync
+Create a test project to verify the integration:
+
+Navigate to Resources → Projects
+Click Add to create a new project
+Configure the project:
+
+Name: Hub Integration Test
+Organization: Default
+SCM Type: Git
+SCM URL: https://github.com/ansible/ansible-examples.git
+Create a requirements file for collections:
+
+# requirements.yml
+collections:
+  - name: community.general
+    version: ">=1.0.0"
+  - name: ansible.posix
+    version: ">=1.0.0"
+Test collection download by creating a job template that uses collections from your Private Automation Hub.
+
+Subtask 3.4: Verify Hub Integration
+Check collection availability by navigating to Collections in the Automation Controller.
+
+Verify that collections are being pulled from your Private Automation Hub rather than the public Galaxy.
+
+Test a playbook that uses collections to ensure they're properly accessible:
+
+---
+- name: Test Hub Integration
+  hosts: localhost
+  collections:
+    - community.general
+  tasks:
+    - name: Test collection module
+      community.general.timezone:
+        name: UTC
+Troubleshooting Tips
+Common LDAP Issues
+Problem: LDAP authentication fails Solution:
+
+Verify LDAP server connectivity using ldapsearch command
+Check bind DN and password accuracy
+Ensure proper user search base configuration
+Problem: Users can authenticate but have no permissions Solution:
+
+Verify group mapping configuration
+Check that LDAP groups exist and contain the expected users
+Ensure role assignments are properly configured
+User Management Issues
+Problem: Custom roles not working as expected Solution:
+
+Review permission assignments for the role
+Check that users are properly assigned to roles
+Verify organization-level permissions
+Hub Integration Issues
+Problem: Collections not downloading from Private Hub Solution:
+
+Verify API token validity
+Check network connectivity to Hub
+Ensure proper SSL certificate configuration
+Verification Steps
+Test Authentication Configuration
+Log out of the Automation Controller.
+
+Attempt to log in using LDAP credentials.
+
+Verify role-based access by logging in as different users and checking available options.
+
+Test Hub Integration
+Create a job template that requires collections.
+
+Execute the job and verify collections are downloaded from your Private Hub.
+
+Check the job output for collection source information.
+
+Conclusion
+In this lab, you have successfully:
+
+• Configured LDAP authentication to integrate your Automation Controller with an external directory service, enabling centralized user management and single sign-on capabilities
+
+• Created custom user roles with specific permissions, implementing the principle of least privilege and ensuring users have appropriate access levels for their responsibilities
+
+• Established integration between Automation Controller and Private Automation Hub, creating a secure, controlled environment for collection management and distribution
+
+• Implemented security best practices through proper user management, role-based access control, and secure authentication mechanisms
+
+These configurations are essential for enterprise deployments of Ansible Automation Platform, as they provide the foundation for secure, scalable, and manageable automation environments. The authentication integration ensures that your automation platform works seamlessly with existing organizational infrastructure, while the Hub integration provides controlled access to certified and supported automation content.
+
+Understanding these configuration aspects is crucial for the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform exam, as they represent core administrative tasks that automation platform administrators must master in production environments.
