@@ -1,0 +1,386 @@
+Lab 5: Upload Content Collections to Private Automation Hub
+Lab Objectives
+By the end of this lab, you will be able to:
+
+• Understand the architecture and purpose of Private Automation Hub • Upload content collections from Git repositories and local directories • Categorize and organize content collections within the hub • Verify successful content uploads using the hub's web interface • Manage collection versions and dependencies • Configure collection namespaces and permissions
+
+Prerequisites
+Before starting this lab, you should have:
+
+• Basic understanding of Ansible concepts (playbooks, roles, modules) • Familiarity with Git version control system • Knowledge of Linux command line operations • Understanding of YAML syntax • Basic networking concepts (HTTP/HTTPS, ports) • Experience with web browser navigation
+
+Required Knowledge Areas
+• Ansible collection structure and format • Container technologies (basic understanding) • Package management concepts • Authentication and authorization principles
+
+Lab Environment Setup
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment. No need to build your own virtual machine or install software.
+
+Environment Details
+Your lab environment includes: • CentOS/RHEL 8 or 9 based system • Pre-installed Ansible Automation Platform • Private Automation Hub instance • Git client • Sample content collections • Web browser access
+
+Task 1: Set Up Private Automation Hub Environment
+Subtask 1.1: Verify Private Automation Hub Installation
+First, let's verify that the Private Automation Hub is properly installed and running.
+
+Check the hub service status:
+sudo systemctl status automation-hub
+Verify the hub is listening on the correct port:
+sudo netstat -tlnp | grep :80
+Check if the hub web interface is accessible:
+curl -I http://localhost/api/automation-hub/
+Subtask 1.2: Access the Hub Web Interface
+Open your web browser and navigate to:
+http://your-lab-machine-ip/
+Log in using the default credentials:
+
+Username: admin
+Password: admin (or as provided in your lab environment)
+Navigate to the Collections section in the left sidebar menu.
+
+Subtask 1.3: Configure Hub Settings
+Access the admin panel by clicking on your username in the top-right corner.
+
+Configure basic settings:
+
+Set organization name
+Configure default namespace settings
+Verify storage configuration
+Task 2: Upload Content Collection from Git Repository
+Subtask 2.1: Prepare a Sample Collection from Git
+Create a working directory:
+mkdir -p ~/ansible-collections
+cd ~/ansible-collections
+Clone a sample collection repository:
+git clone https://github.com/ansible-collections/community.general.git
+cd community.general
+Examine the collection structure:
+ls -la
+cat galaxy.yml
+Subtask 2.2: Build the Collection
+Install ansible-core if not already installed:
+pip3 install ansible-core
+Build the collection tarball:
+ansible-galaxy collection build
+Verify the built collection:
+ls -la *.tar.gz
+Subtask 2.3: Upload Collection via Web Interface
+Return to the hub web interface in your browser.
+
+Navigate to Collections > Upload Collection.
+
+Upload the collection:
+
+Click Browse and select your .tar.gz file
+Add a description: "Community General Collection"
+Select appropriate tags
+Click Upload
+Monitor the upload progress in the upload status page.
+
+Subtask 2.4: Upload Collection via Command Line
+Alternatively, you can upload using the command line:
+
+Install the galaxy-importer tool:
+pip3 install galaxy-importer
+Configure authentication:
+export ANSIBLE_GALAXY_SERVER_AUTOMATION_HUB_URL=http://localhost/api/automation-hub/
+export ANSIBLE_GALAXY_SERVER_AUTOMATION_HUB_TOKEN=your-api-token
+Upload the collection:
+ansible-galaxy collection publish community-general-*.tar.gz --server automation_hub
+Task 3: Upload Content Collection from Local Directory
+Subtask 3.1: Create a Custom Collection
+Create a new collection structure:
+cd ~/ansible-collections
+mkdir -p my_namespace/my_collection
+cd my_namespace/my_collection
+Initialize the collection:
+ansible-galaxy collection init my_namespace.my_collection --init-path ~/ansible-collections/
+Navigate to the collection directory:
+cd ~/ansible-collections/my_namespace/my_collection
+Subtask 3.2: Add Content to the Collection
+Create a simple role:
+mkdir -p roles/webserver/tasks
+mkdir -p roles/webserver/handlers
+mkdir -p roles/webserver/templates
+Create the main task file:
+cat > roles/webserver/tasks/main.yml << 'EOF'
+---
+- name: Install Apache web server
+  package:
+    name: httpd
+    state: present
+  become: yes
+
+- name: Start and enable Apache
+  service:
+    name: httpd
+    state: started
+    enabled: yes
+  become: yes
+  notify: restart apache
+
+- name: Create index.html
+  template:
+    src: index.html.j2
+    dest: /var/www/html/index.html
+  become: yes
+  notify: restart apache
+EOF
+Create a handler:
+cat > roles/webserver/handlers/main.yml << 'EOF'
+---
+- name: restart apache
+  service:
+    name: httpd
+    state: restarted
+  become: yes
+EOF
+Create a template:
+cat > roles/webserver/templates/index.html.j2 << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ ansible_hostname }}</title>
+</head>
+<body>
+    <h1>Welcome to {{ ansible_hostname }}</h1>
+    <p>This server is managed by Ansible</p>
+</body>
+</html>
+EOF
+Subtask 3.3: Configure Collection Metadata
+Edit the galaxy.yml file:
+cat > galaxy.yml << 'EOF'
+namespace: my_namespace
+name: my_collection
+version: 1.0.0
+readme: README.md
+authors:
+  - Your Name <your.email@example.com>
+description: A sample collection for web server management
+license:
+  - GPL-2.0-or-later
+license_file: ''
+tags:
+  - webserver
+  - apache
+  - infrastructure
+dependencies: {}
+repository: http://example.com/repository
+documentation: http://docs.example.com
+homepage: http://example.com
+issues: http://example.com/issues
+build_ignore: []
+EOF
+Create a README file:
+cat > README.md << 'EOF'
+# My Collection
+
+This collection provides roles and playbooks for web server management.
+
+## Included Content
+
+- **Roles**:
+  - `webserver`: Installs and configures Apache web server
+
+## Installation
+
+```bash
+ansible-galaxy collection install my_namespace.my_collection
+Usage
+- hosts: webservers
+  roles:
+    - my_namespace.my_collection.webserver
+EOF
+
+
+### Subtask 3.4: Build and Upload the Custom Collection
+
+1. **Build the collection**:
+
+```bash
+ansible-galaxy collection build
+Upload via web interface:
+Navigate to Collections > Upload Collection
+Select the newly created .tar.gz file
+Add description: "Custom Web Server Collection"
+Add tags: webserver, apache, custom
+Click Upload
+Task 4: Categorize and Organize Content
+Subtask 4.1: Create Namespaces
+Access the Namespaces section in the hub web interface.
+
+Create a new namespace:
+
+Click Create Namespace
+Name: production_collections
+Description: "Production-ready collections"
+Click Create
+Create another namespace:
+
+Name: development_collections
+Description: "Development and testing collections"
+Subtask 4.2: Organize Collections by Categories
+Navigate to Collections in the hub interface.
+
+Edit collection metadata:
+
+Select your uploaded collection
+Click Edit
+Update tags to include categories:
+infrastructure
+webserver
+production-ready
+Set collection visibility:
+
+Configure public/private visibility
+Set appropriate permissions
+Subtask 4.3: Configure Collection Dependencies
+Create a requirements.yml file:
+cat > ~/requirements.yml << 'EOF'
+---
+collections:
+  - name: community.general
+    version: ">=1.0.0"
+  - name: my_namespace.my_collection
+    version: ">=1.0.0"
+EOF
+Upload the requirements file to document collection dependencies.
+Task 5: Verify Content Upload and Management
+Subtask 5.1: Verify Upload Status
+Check upload history:
+
+Navigate to Collections > Upload History
+Verify all uploads completed successfully
+Check for any error messages
+Verify collection details:
+
+Click on each uploaded collection
+Verify metadata is correct
+Check that all files are present
+Subtask 5.2: Test Collection Installation
+Install collections from your private hub:
+# Configure ansible.cfg to use your private hub
+cat > ~/.ansible.cfg << 'EOF'
+[defaults]
+collections_paths = ./collections
+
+[galaxy]
+server_list = automation_hub
+
+[galaxy_server.automation_hub]
+url = http://localhost/api/automation-hub/
+token = your-api-token
+EOF
+Install a collection:
+ansible-galaxy collection install my_namespace.my_collection
+Verify installation:
+ansible-galaxy collection list
+Subtask 5.3: Test Collection Functionality
+Create a test playbook:
+cat > test-playbook.yml << 'EOF'
+---
+- name: Test custom collection
+  hosts: localhost
+  connection: local
+  become: yes
+  roles:
+    - my_namespace.my_collection.webserver
+EOF
+Run the test playbook:
+ansible-playbook test-playbook.yml --check
+Subtask 5.4: Monitor Hub Performance
+Check hub logs:
+sudo journalctl -u automation-hub -f
+Monitor storage usage:
+df -h /var/lib/pulp/
+Check hub API status:
+curl -s http://localhost/api/automation-hub/v3/collections/ | jq '.'
+Task 6: Advanced Collection Management
+Subtask 6.1: Version Management
+Create a new version of your collection:
+cd ~/ansible-collections/my_namespace/my_collection
+# Update version in galaxy.yml
+sed -i 's/version: 1.0.0/version: 1.1.0/' galaxy.yml
+Add new content:
+# Add a new task to the webserver role
+cat >> roles/webserver/tasks/main.yml << 'EOF'
+
+- name: Configure firewall for HTTP
+  firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+    immediate: yes
+  become: yes
+EOF
+Build and upload the new version:
+ansible-galaxy collection build
+# Upload via web interface or command line
+Subtask 6.2: Collection Approval Workflow
+Configure approval settings in the hub admin panel:
+
+Navigate to Settings > Approval
+Configure automatic vs manual approval
+Set approval criteria
+Test the approval workflow:
+
+Upload a collection
+Check approval status
+Approve/reject as needed
+Troubleshooting Common Issues
+Issue 1: Upload Failures
+Problem: Collection upload fails with authentication error.
+
+Solution:
+
+# Verify API token
+curl -H "Authorization: Token your-api-token" http://localhost/api/automation-hub/v3/collections/
+
+# Check token permissions in hub admin panel
+Issue 2: Collection Build Errors
+Problem: ansible-galaxy collection build fails.
+
+Solution:
+
+# Validate galaxy.yml syntax
+python3 -c "import yaml; yaml.safe_load(open('galaxy.yml'))"
+
+# Check for required files
+ls -la README.md galaxy.yml
+Issue 3: Hub Service Issues
+Problem: Private Automation Hub service not responding.
+
+Solution:
+
+# Restart hub services
+sudo systemctl restart automation-hub
+sudo systemctl restart nginx
+
+# Check service logs
+sudo journalctl -u automation-hub --no-pager -l
+Best Practices
+Collection Development
+• Use semantic versioning for collection versions • Include comprehensive documentation in README files • Test collections thoroughly before uploading • Use meaningful tags and descriptions for discoverability
+
+Hub Management
+• Regularly backup hub data and configurations • Monitor storage usage and clean up old versions • Implement proper access controls and permissions • Keep hub software updated with latest patches
+
+Security Considerations
+• Use strong authentication tokens • Implement role-based access control • Regularly audit user permissions • Enable HTTPS for production deployments
+
+Conclusion
+In this lab, you have successfully:
+
+• Set up and configured a Private Automation Hub environment • Uploaded content collections from both Git repositories and local directories • Organized and categorized collections using namespaces and tags • Verified uploads through both web interface and command-line tools • Implemented version management and approval workflows • Tested collection functionality to ensure proper operation
+
+Why This Matters
+Private Automation Hub serves as a centralized repository for your organization's Ansible content, providing:
+
+• Centralized Management: Single source of truth for automation content • Version Control: Proper versioning and dependency management • Security: Controlled access to sensitive automation content • Collaboration: Team-based development and sharing of collections • Compliance: Audit trails and approval workflows for enterprise environments
+
+Next Steps
+To further enhance your skills:
+
+• Explore advanced hub configurations and integrations • Learn about hub clustering for high availability • Study collection development best practices • Practice with complex collection dependencies • Investigate hub API automation capabilities
+
+This knowledge is essential for the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform exam and real-world enterprise automation scenarios.

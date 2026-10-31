@@ -1,0 +1,7 @@
+---
+- name: Test custom collection
+  hosts: localhost
+  connection: local
+  become: yes
+  roles:
+    - my_namespace.my_collection.webserver

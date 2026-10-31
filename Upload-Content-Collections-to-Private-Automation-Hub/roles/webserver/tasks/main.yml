@@ -1,0 +1,29 @@
+---
+- name: Install Apache web server
+  package:
+    name: httpd
+    state: present
+  become: yes
+
+- name: Start and enable Apache
+  service:
+    name: httpd
+    state: started
+    enabled: yes
+  become: yes
+  notify: restart apache
+
+- name: Create index.html
+  template:
+    src: index.html.j2
+    dest: /var/www/html/index.html
+  become: yes
+  notify: restart apache
+
+- name: Configure firewall for HTTP
+  firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+    immediate: yes
+  become: yes
