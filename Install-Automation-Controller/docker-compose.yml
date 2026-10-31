@@ -1,0 +1,64 @@
+version: '3.8'
+services:
+  postgresql:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: awx
+      POSTGRES_USER: awx
+      POSTGRES_PASSWORD: awxpassword
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    command: redis-server --requirepass redispassword
+    volumes:
+      - redis_data:/data
+
+  awx_web:
+    image: quay.io/ansible/awx:21.14.0
+    depends_on:
+      - postgresql
+      - redis
+    environment:
+      - DATABASE_HOST=postgresql
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=awx
+      - DATABASE_USER=awx
+      - DATABASE_PASSWORD=awxpassword
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redispassword
+      - SECRET_KEY=awxsecretkey123456789
+    ports:
+      - "8080:8052"
+    volumes:
+      - awx_projects:/var/lib/awx/projects
+      - awx_job_status:/var/lib/awx/job_status
+
+  awx_task:
+    image: quay.io/ansible/awx:21.14.0
+    depends_on:
+      - postgresql
+      - redis
+    environment:
+      - DATABASE_HOST=postgresql
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=awx
+      - DATABASE_USER=awx
+      - DATABASE_PASSWORD=awxpassword
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redispassword
+      - SECRET_KEY=awxsecretkey123456789
+    volumes:
+      - awx_projects:/var/lib/awx/projects
+      - awx_job_status:/var/lib/awx/job_status
+
+volumes:
+  postgresql_data:
+  redis_data:
+  awx_projects:
+  awx_job_status:
