@@ -1,0 +1,436 @@
+Lab 7: Manage Access to Private Automation Hub
+Objectives
+By the end of this lab, students will be able to:
+
+Create and configure user groups for different organizational roles in Private Automation Hub
+Assign appropriate permissions to each user group based on role requirements
+Implement proper access control mechanisms for automation content
+Monitor user activities and audit access logs for security compliance
+Understand best practices for managing user permissions in enterprise automation environments
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command line operations
+Familiarity with Ansible concepts and terminology
+Knowledge of user and group management in Linux systems
+Understanding of role-based access control (RBAC) principles
+Basic knowledge of web-based administration interfaces
+Lab Environment
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines with Private Automation Hub already installed. Simply click Start Lab to begin - no need to build your own virtual machine or install software.
+
+Your lab environment includes:
+
+CentOS/RHEL 8 or 9 based system
+Private Automation Hub (galaxy_ng) pre-installed
+PostgreSQL database configured
+Nginx web server configured
+Administrative access credentials provided
+Task 1: Create User Groups for Different Roles
+Subtask 1.1: Access the Private Automation Hub Interface
+Open your web browser and navigate to the Private Automation Hub interface:
+# The URL will be provided in your lab environment, typically:
+https://your-hub-hostname
+Log in using the administrative credentials provided in your lab environment.
+
+Navigate to the User Access section from the main menu.
+
+Subtask 1.2: Create Development Team Group
+Click on Groups in the left navigation panel.
+
+Click the Create button to create a new group.
+
+Fill in the group details:
+
+Name: developers
+Description: Development team members with content creation access
+Click Save to create the group.
+
+Subtask 1.3: Create Operations Team Group
+Click Create again to add another group.
+
+Configure the operations group:
+
+Name: operations
+Description: Operations team members with deployment and execution access
+Click Save to create the group.
+
+Subtask 1.4: Create Content Reviewers Group
+Create a third group for content review:
+
+Name: reviewers
+Description: Content reviewers with approval and publishing permissions
+Click Save to complete the group creation.
+
+Subtask 1.5: Create Read-Only Users Group
+Create a final group for limited access users:
+
+Name: readonly-users
+Description: Users with read-only access to approved content
+Click Save to finish creating all required groups.
+
+Task 2: Assign Permissions to Each Group
+Subtask 2.1: Configure Developer Group Permissions
+Click on the developers group from the groups list.
+
+Navigate to the Permissions tab.
+
+Assign the following permissions by checking the appropriate boxes:
+
+Collection Permissions:
+- galaxy.add_collection
+- galaxy.change_collection
+- galaxy.view_collection
+- galaxy.upload_to_namespace
+
+Namespace Permissions:
+- galaxy.add_namespace
+- galaxy.change_namespace
+- galaxy.view_namespace
+
+Repository Permissions:
+- galaxy.view_collectionrepository
+- galaxy.modify_ansible_repo_content
+Click Save to apply the permissions.
+Subtask 2.2: Configure Operations Group Permissions
+Select the operations group.
+
+In the Permissions tab, assign these permissions:
+
+Collection Permissions:
+- galaxy.view_collection
+- galaxy.download_collection
+
+Repository Permissions:
+- galaxy.view_collectionrepository
+- galaxy.change_collectionrepository
+
+Execution Permissions:
+- galaxy.execute_collection
+- galaxy.view_execution_environment
+Click Save to apply the permissions.
+Subtask 2.3: Configure Reviewers Group Permissions
+Select the reviewers group.
+
+Assign comprehensive review and approval permissions:
+
+Collection Permissions:
+- galaxy.view_collection
+- galaxy.change_collection
+- galaxy.approve_collection
+- galaxy.reject_collection
+
+Repository Permissions:
+- galaxy.view_collectionrepository
+- galaxy.change_collectionrepository
+- galaxy.move_collection
+
+Publishing Permissions:
+- galaxy.publish_collection
+- galaxy.unpublish_collection
+Click Save to apply the permissions.
+Subtask 2.4: Configure Read-Only Group Permissions
+Select the readonly-users group.
+
+Assign minimal read-only permissions:
+
+Collection Permissions:
+- galaxy.view_collection
+
+Repository Permissions:
+- galaxy.view_collectionrepository
+
+Basic Access:
+- galaxy.view_namespace
+Click Save to apply the permissions.
+Task 3: Monitor and Audit User Access Logs
+Subtask 3.1: Create Test Users for Each Group
+Navigate to Users in the left navigation panel.
+
+Create test users for each group:
+
+Developer User:
+
+Username: dev-user1
+Email: dev1@company.com
+First Name: John
+Last Name: Developer
+Groups: developers
+Operations User:
+
+Username: ops-user1
+Email: ops1@company.com
+First Name: Jane
+Last Name: Operations
+Groups: operations
+Reviewer User:
+
+Username: reviewer1
+Email: reviewer1@company.com
+First Name: Mike
+Last Name: Reviewer
+Groups: reviewers
+Read-Only User:
+
+Username: readonly1
+Email: readonly1@company.com
+First Name: Sarah
+Last Name: Reader
+Groups: readonly-users
+Subtask 3.2: Enable Audit Logging
+Access the system via SSH using the credentials provided in your lab environment.
+
+Configure audit logging for the Private Automation Hub:
+
+# Edit the galaxy configuration file
+sudo vi /etc/pulp/settings.py
+
+# Add or modify the following logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'audit_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': '/var/log/galaxy/audit.log',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'galaxy.audit': {
+            'handlers': ['audit_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+# Enable audit logging
+AUDIT_LOGGING_ENABLED = True
+Create the log directory and set proper permissions:
+sudo mkdir -p /var/log/galaxy
+sudo chown pulp:pulp /var/log/galaxy
+sudo chmod 755 /var/log/galaxy
+Restart the galaxy services:
+sudo systemctl restart pulpcore-api
+sudo systemctl restart pulpcore-content
+sudo systemctl restart pulpcore-worker@1
+sudo systemctl restart pulpcore-worker@2
+Subtask 3.3: Test User Access and Generate Audit Logs
+Log out of the administrative interface.
+
+Test each user account by logging in and performing role-appropriate actions:
+
+Test Developer Access:
+
+Log in as dev-user1
+Attempt to upload a collection
+Try to create a namespace
+Log out
+Test Operations Access:
+
+Log in as ops-user1
+Browse available collections
+Attempt to download a collection
+Try to access execution environments
+Log out
+Test Reviewer Access:
+
+Log in as reviewer1
+Access pending collections for review
+Attempt to approve/reject content
+Log out
+Test Read-Only Access:
+
+Log in as readonly1
+Browse collections (should work)
+Attempt to upload content (should fail)
+Log out
+Subtask 3.4: Monitor Access Logs
+Return to SSH access and examine the audit logs:
+# View recent audit log entries
+sudo tail -f /var/log/galaxy/audit.log
+
+# Search for specific user activities
+sudo grep "dev-user1" /var/log/galaxy/audit.log
+
+# View login attempts
+sudo grep "login" /var/log/galaxy/audit.log
+
+# Check permission denied events
+sudo grep "permission denied" /var/log/galaxy/audit.log
+Create a log monitoring script:
+# Create a monitoring script
+sudo vi /usr/local/bin/galaxy-audit-monitor.sh
+
+#!/bin/bash
+# Galaxy Audit Log Monitor
+
+LOG_FILE="/var/log/galaxy/audit.log"
+REPORT_FILE="/tmp/galaxy-audit-report-$(date +%Y%m%d).txt"
+
+echo "Galaxy Automation Hub Audit Report - $(date)" > $REPORT_FILE
+echo "================================================" >> $REPORT_FILE
+echo "" >> $REPORT_FILE
+
+echo "User Login Summary:" >> $REPORT_FILE
+grep "login" $LOG_FILE | awk '{print $4}' | sort | uniq -c >> $REPORT_FILE
+echo "" >> $REPORT_FILE
+
+echo "Failed Access Attempts:" >> $REPORT_FILE
+grep -i "denied\|failed\|unauthorized" $LOG_FILE >> $REPORT_FILE
+echo "" >> $REPORT_FILE
+
+echo "Collection Activities:" >> $REPORT_FILE
+grep -i "collection" $LOG_FILE | tail -20 >> $REPORT_FILE
+
+echo "Report generated: $REPORT_FILE"
+Make the script executable and run it:
+sudo chmod +x /usr/local/bin/galaxy-audit-monitor.sh
+sudo /usr/local/bin/galaxy-audit-monitor.sh
+Subtask 3.5: Set Up Automated Log Rotation
+Configure log rotation for audit logs:
+# Create logrotate configuration
+sudo vi /etc/logrotate.d/galaxy-audit
+
+/var/log/galaxy/audit.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 pulp pulp
+    postrotate
+        systemctl reload pulpcore-api
+    endscript
+}
+Test the log rotation configuration:
+sudo logrotate -d /etc/logrotate.d/galaxy-audit
+Subtask 3.6: Create Access Monitoring Dashboard
+Create a simple monitoring script that generates regular reports:
+# Create monitoring cron job
+sudo vi /usr/local/bin/daily-access-report.sh
+
+#!/bin/bash
+# Daily Galaxy Access Report
+
+DATE=$(date +%Y-%m-%d)
+REPORT_DIR="/var/log/galaxy/reports"
+REPORT_FILE="$REPORT_DIR/access-report-$DATE.txt"
+
+mkdir -p $REPORT_DIR
+
+echo "Galaxy Private Automation Hub - Daily Access Report" > $REPORT_FILE
+echo "Date: $DATE" >> $REPORT_FILE
+echo "=================================================" >> $REPORT_FILE
+
+# Count unique users
+echo "Unique Users Active Today:" >> $REPORT_FILE
+grep "$(date +%Y-%m-%d)" /var/log/galaxy/audit.log | grep -o 'user:[^[:space:]]*' | sort | uniq | wc -l >> $REPORT_FILE
+
+# List active users
+echo "" >> $REPORT_FILE
+echo "Active Users:" >> $REPORT_FILE
+grep "$(date +%Y-%m-%d)" /var/log/galaxy/audit.log | grep -o 'user:[^[:space:]]*' | sort | uniq >> $REPORT_FILE
+
+# Count activities by type
+echo "" >> $REPORT_FILE
+echo "Activity Summary:" >> $REPORT_FILE
+grep "$(date +%Y-%m-%d)" /var/log/galaxy/audit.log | awk '{print $6}' | sort | uniq -c >> $REPORT_FILE
+
+# Security events
+echo "" >> $REPORT_FILE
+echo "Security Events:" >> $REPORT_FILE
+grep "$(date +%Y-%m-%d)" /var/log/galaxy/audit.log | grep -i "denied\|failed\|error" >> $REPORT_FILE
+
+echo "Report generated at: $(date)" >> $REPORT_FILE
+Make the script executable:
+sudo chmod +x /usr/local/bin/daily-access-report.sh
+Add to crontab for daily execution:
+# Add cron job for daily reports
+sudo crontab -e
+
+# Add this line to run daily at 11:59 PM
+59 23 * * * /usr/local/bin/daily-access-report.sh
+Verification and Testing
+Verify Group Configuration
+Log back into the administrative interface.
+
+Navigate to Groups and verify all four groups exist:
+
+developers
+operations
+reviewers
+readonly-users
+Check each group's permissions match the assigned roles.
+
+Verify User Access Controls
+Test that users can only perform actions allowed by their group permissions.
+
+Verify that unauthorized actions are properly blocked and logged.
+
+Confirm that audit logs capture all user activities.
+
+Troubleshooting Common Issues
+Issue 1: Users Cannot Access Certain Features
+Solution:
+
+# Check user group membership
+# In the web interface, go to Users > [username] > Groups tab
+
+# Verify group permissions
+# Go to Groups > [groupname] > Permissions tab
+Issue 2: Audit Logs Not Generating
+Solution:
+
+# Check if audit logging is enabled
+sudo grep "AUDIT_LOGGING_ENABLED" /etc/pulp/settings.py
+
+# Verify log file permissions
+sudo ls -la /var/log/galaxy/
+
+# Check service status
+sudo systemctl status pulpcore-api
+Issue 3: Permission Changes Not Taking Effect
+Solution:
+
+# Restart galaxy services
+sudo systemctl restart pulpcore-api
+sudo systemctl restart pulpcore-content
+sudo systemctl restart pulpcore-worker@1
+sudo systemctl restart pulpcore-worker@2
+
+# Clear any cached permissions
+sudo -u pulp pulpcore-manager shell -c "from django.core.cache import cache; cache.clear()"
+Conclusion
+In this lab, you have successfully implemented comprehensive access control for a Private Automation Hub environment. You accomplished the following key objectives:
+
+Access Control Implementation:
+
+Created four distinct user groups representing different organizational roles
+Configured appropriate permissions for each group based on their responsibilities
+Established a proper role-based access control (RBAC) system
+Security and Monitoring:
+
+Enabled comprehensive audit logging to track all user activities
+Implemented automated log monitoring and reporting systems
+Set up log rotation to manage storage and maintain historical records
+Best Practices Applied:
+
+Followed the principle of least privilege by granting minimal necessary permissions
+Implemented proper separation of duties between development, operations, and review roles
+Established monitoring and auditing capabilities for compliance and security
+Why This Matters: Managing access to automation content is critical for enterprise security and compliance. Proper access controls ensure that:
+
+Sensitive automation content is protected from unauthorized access
+Users can only perform actions appropriate to their roles
+All activities are logged for security auditing and compliance reporting
+Organizations can maintain control over their automation infrastructure while enabling productivity
+This lab provides the foundation for managing enterprise-scale automation platforms where multiple teams need different levels of access to automation content, ensuring both security and operational efficiency.
