@@ -1,0 +1,62 @@
+---
+- name: Performance Test for Execution Environment
+  hosts: localhost
+  gather_facts: yes
+  
+  tasks:
+    - name: Record start time
+      set_fact:
+        start_time: "{{ ansible_date_time.epoch }}"
+    
+    - name: CPU intensive task
+      shell: |
+        python3 -c "
+        import time
+        start = time.time()
+        # Simple CPU intensive operation
+        result = sum(i*i for i in range(100000))
+        end = time.time()
+        print(f'CPU test completed in {end-start:.2f} seconds')
+        print(f'Result: {result}')
+        "
+      register: cpu_test
+    
+    - name: Memory usage test
+      shell: |
+        python3 -c "
+        import sys
+        # Create a list to test memory usage
+        test_list = list(range(1000000))
+        memory_mb = sys.getsizeof(test_list) / 1024 / 1024
+        print(f'Memory test: Created list using {memory_mb:.2f} MB')
+        "
+      register: memory_test
+    
+    - name: Collection loading test
+      shell: |
+        python3 -c "
+        import time
+        start = time.time()
+        # Test importing collections
+        from ansible.module_utils.basic import AnsibleModule
+        end = time.time()
+        print(f'Collection loading test completed in {end-start:.4f} seconds')
+        "
+      register: collection_test
+    
+    - name: Record end time
+      set_fact:
+        end_time: "{{ ansible_date_time.epoch }}"
+    
+    - name: Calculate total execution time
+      set_fact:
+        total_time: "{{ (end_time | int) - (start_time | int) }}"
+    
+    - name: Display performance results
+      debug:
+        msg: |
+          Performance Test Results:
+          - Total execution time: {{ total_time }} seconds
+          - CPU test: {{ cpu_test.stdout_lines[-2:] | join(' | ') }}
+          - Memory test: {{ memory_test.stdout }}
+          - Collection loading: {{ collection_test.stdout }}

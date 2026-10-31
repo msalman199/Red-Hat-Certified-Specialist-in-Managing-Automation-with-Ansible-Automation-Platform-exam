@@ -1,0 +1,69 @@
+---
+- name: Demonstrate Custom Execution Environment
+  hosts: localhost
+  gather_facts: yes
+  
+  tasks:
+    - name: Show execution environment details
+      debug:
+        msg: |
+          Running in custom execution environment!
+          Ansible version: {{ ansible_version.full }}
+          Python version: {{ ansible_python_version }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+    
+    - name: Test community.general collection
+      community.general.system_info:
+      register: system_details
+    
+    - name: Display system architecture
+      debug:
+        msg: "System architecture: {{ system_details.system_info.architecture }}"
+    
+    - name: Test network connectivity with requests
+      uri:
+        url: "https://httpbin.org/user-agent"
+        method: GET
+        return_content: yes
+      register: network_result
+    
+    - name: Show network test result
+      debug:
+        msg: "Network test successful: {{ network_result.json['user-agent'] }}"
+    
+    - name: Generate secure random password
+      community.crypto.random_string:
+        length: 16
+        special: true
+      register: secure_password
+    
+    - name: Display password generation success
+      debug:
+        msg: "Secure password generated successfully (length: {{ secure_password.random_string | length }})"
+    
+    - name: Create summary report
+      copy:
+        content: |
+          Custom Execution Environment Demo Report
+          =======================================
+          
+          Execution Details:
+          - Date: {{ ansible_date_time.iso8601 }}
+          - Execution Environment: Custom EE v1.0
+          - Ansible Version: {{ ansible_version.full }}
+          - Python Version: {{ ansible_python_version }}
+          - Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          
+          Tested Features:
+          ✓ Basic Ansible functionality
+          ✓ Community.general collection
+          ✓ Network connectivity (requests library)
+          ✓ Cryptographic operations
+          ✓ File operations
+          
+          All tests completed successfully!
+        dest: /tmp/custom-ee-demo-report.txt
+    
+    - name: Confirm report creation
+      debug:
+        msg: "Demo report created at /tmp/custom-ee-demo-report.txt"

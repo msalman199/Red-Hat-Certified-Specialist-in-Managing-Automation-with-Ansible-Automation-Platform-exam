@@ -1,0 +1,100 @@
+---
+- name: Comprehensive Execution Environment Test
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    test_results: []
+  
+  tasks:
+    - name: Test 1 - Basic Ansible functionality
+      debug:
+        msg: "Ansible is working correctly"
+      register: test1
+      
+    - name: Add test 1 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 1: Basic Ansible - PASSED'] }}"
+
+    - name: Test 2 - Community.general collection
+      community.general.system_info:
+      register: sys_info
+      
+    - name: Add test 2 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 2: Community.general collection - PASSED'] }}"
+
+    - name: Test 3 - Network connectivity
+      uri:
+        url: "https://httpbin.org/json"
+        method: GET
+        return_content: yes
+      register: network_test
+      ignore_errors: yes
+      
+    - name: Add test 3 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 3: Network connectivity - ' + ('PASSED' if network_test.status == 200 else 'FAILED')] }}"
+
+    - name: Test 4 - Crypto operations
+      community.crypto.random_string:
+        length: 32
+        special: false
+      register: crypto_test
+      
+    - name: Add test 4 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 4: Crypto operations - PASSED'] }}"
+
+    - name: Test 5 - File operations
+      ansible.posix.synchronize:
+        src: /etc/hostname
+        dest: /tmp/test-hostname
+        mode: pull
+      delegate_to: localhost
+      register: file_test
+      ignore_errors: yes
+      
+    - name: Add test 5 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 5: File operations - ' + ('PASSED' if file_test is succeeded else 'FAILED')] }}"
+
+    - name: Test 6 - Python libraries
+      shell: |
+        python3 -c "
+        import requests
+        import yaml
+        import cryptography
+        print('All Python libraries imported successfully')
+        "
+      register: python_test
+      
+    - name: Add test 6 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 6: Python libraries - PASSED'] }}"
+
+    - name: Display all test results
+      debug:
+        msg: "{{ test_results }}"
+        
+    - name: Create test report
+      copy:
+        content: |
+          Execution Environment Test Report
+          =================================
+          Date: {{ ansible_date_time.iso8601 }}
+          EE Image: custom-ee:1.0
+          
+          Test Results:
+          {% for result in test_results %}
+          - {{ result }}
+          {% endfor %}
+          
+          System Information:
+          - OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - Python: {{ ansible_python_version }}
+          - Ansible: {{ ansible_version.full }}
+        dest: /tmp/ee-test-report.txt
+      
+    - name: Display test report location
+      debug:
+        msg: "Test report saved to /tmp/ee-test-report.txt"

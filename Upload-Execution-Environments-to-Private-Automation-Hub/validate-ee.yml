@@ -1,0 +1,126 @@
+---
+- name: Validate Custom Execution Environment
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    validation_tests:
+      - name: "Ansible Core"
+        status: "unknown"
+      - name: "Community Collections"
+        status: "unknown"
+      - name: "Python Libraries"
+        status: "unknown"
+      - name: "System Packages"
+        status: "unknown"
+      - name: "Network Connectivity"
+        status: "unknown"
+  
+  tasks:
+    - name: Test Ansible Core functionality
+      debug:
+        msg: "Ansible {{ ansible_version.full }} is working"
+      register: ansible_test
+    
+    - name: Update Ansible test status
+      set_fact:
+        validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED'} if item.name == 'Ansible Core' else {}) | list }}"
+      when: ansible_test is succeeded
+    
+    - name: Test community collections
+      block:
+        - name: Test community.general
+          community.general.system_info:
+          register: community_test
+        
+        - name: Test community.crypto
+          community.crypto.random_string:
+            length: 8
+          register: crypto_test
+        
+        - name: Update community collections status
+          set_fact:
+            validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED'} if item.name == 'Community Collections' else {}) | list }}"
+      rescue:
+        - name: Mark community collections as failed
+          set_fact:
+            validation_tests: "{{ validation_tests | map('combine', {'status': 'FAILED'} if item.name == 'Community Collections' else {}) | list }}"
+    
+    - name: Test Python libraries
+      shell: |
+        python3 -c "
+        try:
+            import requests, yaml, cryptography, netaddr
+            print('All required Python libraries available')
+            exit(0)
+        except ImportError as e:
+            print(f'Missing library: {e}')
+            exit(1)
+        "
+      register: python_test
+      ignore_errors: yes
+    
+    - name: Update Python libraries status
+      set_fact:
+        validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED' if python_test.rc == 0 else 'FAILED'} if item.name == 'Python Libraries' else {}) | list }}"
+    
+    - name: Test system packages
+      shell: |
+        which git && which rsync && which ssh && echo "System packages available"
+      register: system_test
+      ignore_errors: yes
+    
+    - name: Update system packages status
+      set_fact:
+        validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED' if system_test.rc == 0 else 'FAILED'} if item.name == 'System Packages' else {}) | list }}"
+    
+    - name: Test network connectivity
+      uri:
+        url: "https://httpbin.org/get"
+        method: GET
+        timeout: 10
+      register: network_test
+      ignore_errors: yes
+    
+    - name: Update network connectivity status
+      set_fact:
+        validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED' if network_test.status == 200 else 'FAILED'} if item.name == 'Network Connectivity' else {}) | list }}"
+    
+    - name: Generate validation report
+      template:
+        content: |
+          Custom Execution Environment Validation Report
+          =============================================
+          
+          Validation Date: {{ ansible_date_time.iso8601 }}
+          Execution Environment: custom-ee:latest
+          
+          Test Results:
+          {% for test in validation_tests %}
+          - {{ test.name }}: {{ test.status }}
+          {% endfor %}
+          
+          Environment Details:
+          - Ansible Version: {{ ansible_version.full }}
+          - Python Version: {{ ansible_python_version }}
+          - Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - Architecture: {{ ansible_architecture }}
+          
+          {% set passed_tests = validation_tests | selectattr('status', 'equalto', 'PASSED') | list | length %}
+          {% set total_tests = validation_tests | length %}
+          
+          Summary: {{ passed_tests }}/{{ total_tests }} tests passed
+          {% if passed_tests == total_tests %}
+          ✅ All validation tests PASSED - Execution Environment is ready for production use!
+          {% else %}
+          ❌ Some validation tests FAILED - Please review and fix issues before production use.
+          {% endif %}
+        dest: /tmp/ee-validation-report.txt
+    
+    - name: Display validation summary
+      debug:
+        msg: |
+          Validation completed!
+          Report saved to: /tmp/ee-validation-report.txt
+          {% set passed_tests = validation_tests | selectattr('status', 'equalto', 'PASSED') | list | length %}
+          {% set total_tests = validation_tests | length %}
+          Results: {{ passed_tests }}/{{ total_tests }} tests passed

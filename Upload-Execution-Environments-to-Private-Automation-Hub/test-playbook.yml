@@ -1,0 +1,35 @@
+---
+- name: Test Custom Execution Environment
+  hosts: localhost
+  gather_facts: yes
+  tasks:
+    - name: Display Ansible version
+      debug:
+        msg: "Ansible version: {{ ansible_version.full }}"
+
+    - name: Test community.general collection
+      community.general.system_info:
+      register: system_info
+
+    - name: Display system information
+      debug:
+        msg: "OS Family: {{ system_info.system_info.distribution }}"
+
+    - name: Test Python requests library
+      uri:
+        url: "https://httpbin.org/get"
+        method: GET
+      register: http_test
+
+    - name: Display HTTP test result
+      debug:
+        msg: "HTTP test status: {{ http_test.status }}"
+
+    - name: Test crypto functionality
+      community.crypto.random_string:
+        length: 16
+      register: random_string
+
+    - name: Display random string
+      debug:
+        msg: "Generated random string: {{ random_string.random_string }}"

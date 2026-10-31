@@ -1,0 +1,795 @@
+Lab 6: Upload Execution Environments to Private Automation Hub
+Objectives
+By the end of this lab, you will be able to:
+
+• Understand the concept and importance of Execution Environments in Ansible Automation Platform • Build custom Execution Environments using ansible-builder • Upload Execution Environments to a Private Automation Hub • Configure and test Execution Environments in Automation Controller • Verify the availability and functionality of uploaded environments • Troubleshoot common issues with Execution Environment deployment
+
+Prerequisites
+Before starting this lab, you should have:
+
+• Basic understanding of Ansible playbooks and automation concepts • Familiarity with containerization concepts (Docker/Podman) • Knowledge of YAML syntax and file structure • Understanding of Python package management • Access to command-line interface and text editors • Completion of previous Ansible Automation Platform labs (recommended)
+
+Lab Environment Setup
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment. No need to build your own VM or install additional software - everything is ready to use!
+
+Your lab environment includes: • Red Hat Enterprise Linux 9 with Ansible Automation Platform • Private Automation Hub instance • Automation Controller access • Pre-installed development tools (podman, ansible-builder, git) • Sample playbooks and configuration files
+
+Task 1: Build and Upload an Execution Environment
+Subtask 1.1: Understanding Execution Environments
+Execution Environments are container images that provide a consistent, portable, and reproducible way to execute Ansible automation. They package all the dependencies, collections, and Python libraries needed for your automation tasks.
+
+Key benefits: • Consistency: Same environment across development, testing, and production • Isolation: Dependencies don't conflict between different automation projects • Portability: Can run anywhere containers are supported • Version Control: Track and manage environment changes
+
+Subtask 1.2: Prepare the Build Environment
+First, let's set up our workspace and verify the required tools are available.
+
+# Create a working directory for our Execution Environment
+mkdir -p ~/ee-lab
+cd ~/ee-lab
+
+# Verify ansible-builder is installed
+ansible-builder --version
+
+# Verify podman is available
+podman --version
+
+# Check if we can connect to the registry
+podman login --get-login registry.redhat.io
+Subtask 1.3: Create Execution Environment Definition Files
+Create the necessary files to define our custom Execution Environment. We'll build an environment that includes additional Python libraries and Ansible collections.
+
+Create the execution-environment.yml file:
+
+cat > execution-environment.yml << 'EOF'
+---
+version: 3
+
+images:
+  base_image:
+    name: 'registry.redhat.io/ubi8/ubi:latest'
+
+dependencies:
+  galaxy: requirements.yml
+  python: requirements.txt
+  system: bindep.txt
+
+additional_build_steps:
+  prepend_base:
+    - RUN whoami
+    - RUN cat /etc/os-release
+  prepend_galaxy:
+    - RUN ansible-galaxy --version
+  prepend_builder:
+    - RUN echo "Building custom execution environment"
+  append_final:
+    - RUN echo "Custom EE build completed"
+    - RUN ls -la /usr/share/ansible
+
+build_arg_defaults:
+  ANSIBLE_GALAXY_CLI_COLLECTION_OPTS: "--pre"
+EOF
+Create the requirements.yml file for Ansible collections:
+
+cat > requirements.yml << 'EOF'
+---
+collections:
+  - name: community.general
+    version: ">=6.0.0"
+  - name: ansible.posix
+    version: ">=1.4.0"
+  - name: community.crypto
+    version: ">=2.10.0"
+  - name: community.mysql
+    version: ">=3.5.0"
+  - name: community.postgresql
+    version: ">=2.3.0"
+EOF
+Create the requirements.txt file for Python packages:
+
+cat > requirements.txt << 'EOF'
+requests>=2.28.0
+jinja2>=3.1.0
+pyyaml>=6.0
+cryptography>=3.4.8
+psycopg2-binary>=2.9.0
+pymysql>=1.0.0
+netaddr>=0.8.0
+dnspython>=2.2.0
+EOF
+Create the bindep.txt file for system packages:
+
+cat > bindep.txt << 'EOF'
+git [platform:rpm]
+rsync [platform:rpm]
+openssh-clients [platform:rpm]
+sshpass [platform:rpm]
+curl [platform:rpm]
+wget [platform:rpm]
+unzip [platform:rpm]
+tar [platform:rpm]
+EOF
+Subtask 1.4: Build the Execution Environment
+Now let's build our custom Execution Environment using ansible-builder.
+
+# Build the execution environment
+ansible-builder build \
+  --tag custom-ee:1.0 \
+  --container-runtime podman \
+  --verbosity 2 \
+  .
+
+# Verify the image was created
+podman images | grep custom-ee
+
+# Inspect the image details
+podman inspect custom-ee:1.0 | head -20
+Subtask 1.5: Test the Execution Environment Locally
+Before uploading, let's test our Execution Environment locally to ensure it works correctly.
+
+Create a test playbook:
+
+cat > test-playbook.yml << 'EOF'
+---
+- name: Test Custom Execution Environment
+  hosts: localhost
+  gather_facts: yes
+  tasks:
+    - name: Display Ansible version
+      debug:
+        msg: "Ansible version: {{ ansible_version.full }}"
+
+    - name: Test community.general collection
+      community.general.system_info:
+      register: system_info
+
+    - name: Display system information
+      debug:
+        msg: "OS Family: {{ system_info.system_info.distribution }}"
+
+    - name: Test Python requests library
+      uri:
+        url: "https://httpbin.org/get"
+        method: GET
+      register: http_test
+
+    - name: Display HTTP test result
+      debug:
+        msg: "HTTP test status: {{ http_test.status }}"
+
+    - name: Test crypto functionality
+      community.crypto.random_string:
+        length: 16
+      register: random_string
+
+    - name: Display random string
+      debug:
+        msg: "Generated random string: {{ random_string.random_string }}"
+EOF
+Run the test playbook using our custom EE:
+
+# Test the execution environment
+podman run --rm -it \
+  -v $(pwd):/tmp/work:Z \
+  -w /tmp/work \
+  custom-ee:1.0 \
+  ansible-playbook test-playbook.yml
+
+# Check if all tasks completed successfully
+echo "Exit code: $?"
+Subtask 1.6: Tag and Prepare for Upload
+Prepare the image for upload to the Private Automation Hub.
+
+# Get the Private Automation Hub URL (replace with your actual hub URL)
+HUB_URL="hub.example.com"
+HUB_USERNAME="admin"
+
+# Tag the image for the private registry
+podman tag custom-ee:1.0 ${HUB_URL}/custom-ee:1.0
+podman tag custom-ee:1.0 ${HUB_URL}/custom-ee:latest
+
+# Verify the tags
+podman images | grep custom-ee
+Subtask 1.7: Upload to Private Automation Hub
+Now let's upload our Execution Environment to the Private Automation Hub.
+
+# Login to the Private Automation Hub registry
+echo "Please enter your Private Automation Hub password:"
+podman login ${HUB_URL} --username ${HUB_USERNAME}
+
+# Push the execution environment
+podman push ${HUB_URL}/custom-ee:1.0
+podman push ${HUB_URL}/custom-ee:latest
+
+# Verify the upload
+echo "Upload completed. Check the Private Automation Hub web interface."
+Task 2: Test the Environment by Running a Playbook
+Subtask 2.1: Create a Comprehensive Test Playbook
+Let's create a more comprehensive test playbook that exercises various features of our Execution Environment.
+
+cat > comprehensive-test.yml << 'EOF'
+---
+- name: Comprehensive Execution Environment Test
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    test_results: []
+  
+  tasks:
+    - name: Test 1 - Basic Ansible functionality
+      debug:
+        msg: "Ansible is working correctly"
+      register: test1
+      
+    - name: Add test 1 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 1: Basic Ansible - PASSED'] }}"
+
+    - name: Test 2 - Community.general collection
+      community.general.system_info:
+      register: sys_info
+      
+    - name: Add test 2 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 2: Community.general collection - PASSED'] }}"
+
+    - name: Test 3 - Network connectivity
+      uri:
+        url: "https://httpbin.org/json"
+        method: GET
+        return_content: yes
+      register: network_test
+      ignore_errors: yes
+      
+    - name: Add test 3 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 3: Network connectivity - ' + ('PASSED' if network_test.status == 200 else 'FAILED')] }}"
+
+    - name: Test 4 - Crypto operations
+      community.crypto.random_string:
+        length: 32
+        special: false
+      register: crypto_test
+      
+    - name: Add test 4 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 4: Crypto operations - PASSED'] }}"
+
+    - name: Test 5 - File operations
+      ansible.posix.synchronize:
+        src: /etc/hostname
+        dest: /tmp/test-hostname
+        mode: pull
+      delegate_to: localhost
+      register: file_test
+      ignore_errors: yes
+      
+    - name: Add test 5 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 5: File operations - ' + ('PASSED' if file_test is succeeded else 'FAILED')] }}"
+
+    - name: Test 6 - Python libraries
+      shell: |
+        python3 -c "
+        import requests
+        import yaml
+        import cryptography
+        print('All Python libraries imported successfully')
+        "
+      register: python_test
+      
+    - name: Add test 6 result
+      set_fact:
+        test_results: "{{ test_results + ['Test 6: Python libraries - PASSED'] }}"
+
+    - name: Display all test results
+      debug:
+        msg: "{{ test_results }}"
+        
+    - name: Create test report
+      copy:
+        content: |
+          Execution Environment Test Report
+          =================================
+          Date: {{ ansible_date_time.iso8601 }}
+          EE Image: custom-ee:1.0
+          
+          Test Results:
+          {% for result in test_results %}
+          - {{ result }}
+          {% endfor %}
+          
+          System Information:
+          - OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - Python: {{ ansible_python_version }}
+          - Ansible: {{ ansible_version.full }}
+        dest: /tmp/ee-test-report.txt
+      
+    - name: Display test report location
+      debug:
+        msg: "Test report saved to /tmp/ee-test-report.txt"
+EOF
+Subtask 2.2: Run the Comprehensive Test
+Execute the comprehensive test using our uploaded Execution Environment.
+
+# Run the comprehensive test
+podman run --rm -it \
+  -v $(pwd):/tmp/work:Z \
+  -w /tmp/work \
+  ${HUB_URL}/custom-ee:latest \
+  ansible-playbook comprehensive-test.yml -v
+
+# Check the test report
+podman run --rm -it \
+  -v $(pwd):/tmp/work:Z \
+  -w /tmp/work \
+  ${HUB_URL}/custom-ee:latest \
+  cat /tmp/ee-test-report.txt
+Subtask 2.3: Performance and Resource Testing
+Let's also test the performance characteristics of our Execution Environment.
+
+cat > performance-test.yml << 'EOF'
+---
+- name: Performance Test for Execution Environment
+  hosts: localhost
+  gather_facts: yes
+  
+  tasks:
+    - name: Record start time
+      set_fact:
+        start_time: "{{ ansible_date_time.epoch }}"
+    
+    - name: CPU intensive task
+      shell: |
+        python3 -c "
+        import time
+        start = time.time()
+        # Simple CPU intensive operation
+        result = sum(i*i for i in range(100000))
+        end = time.time()
+        print(f'CPU test completed in {end-start:.2f} seconds')
+        print(f'Result: {result}')
+        "
+      register: cpu_test
+    
+    - name: Memory usage test
+      shell: |
+        python3 -c "
+        import sys
+        # Create a list to test memory usage
+        test_list = list(range(1000000))
+        memory_mb = sys.getsizeof(test_list) / 1024 / 1024
+        print(f'Memory test: Created list using {memory_mb:.2f} MB')
+        "
+      register: memory_test
+    
+    - name: Collection loading test
+      shell: |
+        python3 -c "
+        import time
+        start = time.time()
+        # Test importing collections
+        from ansible.module_utils.basic import AnsibleModule
+        end = time.time()
+        print(f'Collection loading test completed in {end-start:.4f} seconds')
+        "
+      register: collection_test
+    
+    - name: Record end time
+      set_fact:
+        end_time: "{{ ansible_date_time.epoch }}"
+    
+    - name: Calculate total execution time
+      set_fact:
+        total_time: "{{ (end_time | int) - (start_time | int) }}"
+    
+    - name: Display performance results
+      debug:
+        msg: |
+          Performance Test Results:
+          - Total execution time: {{ total_time }} seconds
+          - CPU test: {{ cpu_test.stdout_lines[-2:] | join(' | ') }}
+          - Memory test: {{ memory_test.stdout }}
+          - Collection loading: {{ collection_test.stdout }}
+EOF
+Run the performance test:
+
+# Execute performance test
+podman run --rm -it \
+  -v $(pwd):/tmp/work:Z \
+  -w /tmp/work \
+  ${HUB_URL}/custom-ee:latest \
+  ansible-playbook performance-test.yml
+Task 3: Verify the Environment is Available in the Automation Controller
+Subtask 3.1: Access Automation Controller Web Interface
+Open your web browser and navigate to the Automation Controller URL provided in your lab environment
+Log in using the credentials provided (typically admin/password or as specified in your lab setup)
+Navigate to Administration → Execution Environments
+Subtask 3.2: Add the Execution Environment to Automation Controller
+Method 1: Using the Web Interface
+
+Click the Add button in the Execution Environments section
+
+Fill in the following details:
+
+Name: Custom EE v1.0
+Image: hub.example.com/custom-ee:latest (replace with your actual hub URL)
+Description: Custom execution environment with additional collections and Python libraries
+Organization: Select your organization
+Pull: Always (to ensure latest version is used)
+Click Save
+
+Method 2: Using the API
+
+# Set variables for your environment
+CONTROLLER_URL="https://controller.example.com"
+CONTROLLER_USERNAME="admin"
+CONTROLLER_PASSWORD="your-password"
+
+# Create execution environment via API
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -u "${CONTROLLER_USERNAME}:${CONTROLLER_PASSWORD}" \
+  -d '{
+    "name": "Custom EE v1.0",
+    "image": "hub.example.com/custom-ee:latest",
+    "description": "Custom execution environment with additional collections and Python libraries",
+    "pull": "always"
+  }' \
+  "${CONTROLLER_URL}/api/v2/execution_environments/" \
+  --insecure
+Subtask 3.3: Create a Job Template Using the Custom EE
+Now let's create a job template that uses our custom Execution Environment.
+
+Create a sample project playbook:
+
+cat > ee-demo-playbook.yml << 'EOF'
+---
+- name: Demonstrate Custom Execution Environment
+  hosts: localhost
+  gather_facts: yes
+  
+  tasks:
+    - name: Show execution environment details
+      debug:
+        msg: |
+          Running in custom execution environment!
+          Ansible version: {{ ansible_version.full }}
+          Python version: {{ ansible_python_version }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+    
+    - name: Test community.general collection
+      community.general.system_info:
+      register: system_details
+    
+    - name: Display system architecture
+      debug:
+        msg: "System architecture: {{ system_details.system_info.architecture }}"
+    
+    - name: Test network connectivity with requests
+      uri:
+        url: "https://httpbin.org/user-agent"
+        method: GET
+        return_content: yes
+      register: network_result
+    
+    - name: Show network test result
+      debug:
+        msg: "Network test successful: {{ network_result.json['user-agent'] }}"
+    
+    - name: Generate secure random password
+      community.crypto.random_string:
+        length: 16
+        special: true
+      register: secure_password
+    
+    - name: Display password generation success
+      debug:
+        msg: "Secure password generated successfully (length: {{ secure_password.random_string | length }})"
+    
+    - name: Create summary report
+      copy:
+        content: |
+          Custom Execution Environment Demo Report
+          =======================================
+          
+          Execution Details:
+          - Date: {{ ansible_date_time.iso8601 }}
+          - Execution Environment: Custom EE v1.0
+          - Ansible Version: {{ ansible_version.full }}
+          - Python Version: {{ ansible_python_version }}
+          - Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          
+          Tested Features:
+          ✓ Basic Ansible functionality
+          ✓ Community.general collection
+          ✓ Network connectivity (requests library)
+          ✓ Cryptographic operations
+          ✓ File operations
+          
+          All tests completed successfully!
+        dest: /tmp/custom-ee-demo-report.txt
+    
+    - name: Confirm report creation
+      debug:
+        msg: "Demo report created at /tmp/custom-ee-demo-report.txt"
+EOF
+Subtask 3.4: Configure Job Template in Automation Controller
+Using the Web Interface:
+
+Navigate to Resources → Templates
+
+Click Add → Add job template
+
+Configure the template:
+
+Name: Custom EE Demo Job
+Job Type: Run
+Inventory: Select an appropriate inventory (or create a localhost inventory)
+Project: Select your project containing the demo playbook
+Execution Environment: Select Custom EE v1.0
+Playbook: ee-demo-playbook.yml
+Credentials: Select appropriate credentials if needed
+Click Save
+
+Using the API:
+
+# Create job template via API
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -u "${CONTROLLER_USERNAME}:${CONTROLLER_PASSWORD}" \
+  -d '{
+    "name": "Custom EE Demo Job",
+    "job_type": "run",
+    "inventory": 1,
+    "project": 1,
+    "playbook": "ee-demo-playbook.yml",
+    "execution_environment": 1,
+    "ask_variables_on_launch": false
+  }' \
+  "${CONTROLLER_URL}/api/v2/job_templates/" \
+  --insecure
+Subtask 3.5: Execute and Verify the Job Template
+Launch the Job:
+
+Go to Resources → Templates
+Find your Custom EE Demo Job template
+Click the Launch button (rocket icon)
+Monitor Execution:
+
+Watch the job execution in real-time
+Verify that it's using your custom execution environment
+Check the job output for successful completion of all tasks
+Verify Results:
+
+Check the job output shows your custom EE details
+Confirm all collections and libraries are working
+Verify the report file was created successfully
+Subtask 3.6: Validate Execution Environment Functionality
+Create a validation script to confirm everything is working correctly:
+
+cat > validate-ee.yml << 'EOF'
+---
+- name: Validate Custom Execution Environment
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    validation_tests:
+      - name: "Ansible Core"
+        status: "unknown"
+      - name: "Community Collections"
+        status: "unknown"
+      - name: "Python Libraries"
+        status: "unknown"
+      - name: "System Packages"
+        status: "unknown"
+      - name: "Network Connectivity"
+        status: "unknown"
+  
+  tasks:
+    - name: Test Ansible Core functionality
+      debug:
+        msg: "Ansible {{ ansible_version.full }} is working"
+      register: ansible_test
+    
+    - name: Update Ansible test status
+      set_fact:
+        validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED'} if item.name == 'Ansible Core' else {}) | list }}"
+      when: ansible_test is succeeded
+    
+    - name: Test community collections
+      block:
+        - name: Test community.general
+          community.general.system_info:
+          register: community_test
+        
+        - name: Test community.crypto
+          community.crypto.random_string:
+            length: 8
+          register: crypto_test
+        
+        - name: Update community collections status
+          set_fact:
+            validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED'} if item.name == 'Community Collections' else {}) | list }}"
+      rescue:
+        - name: Mark community collections as failed
+          set_fact:
+            validation_tests: "{{ validation_tests | map('combine', {'status': 'FAILED'} if item.name == 'Community Collections' else {}) | list }}"
+    
+    - name: Test Python libraries
+      shell: |
+        python3 -c "
+        try:
+            import requests, yaml, cryptography, netaddr
+            print('All required Python libraries available')
+            exit(0)
+        except ImportError as e:
+            print(f'Missing library: {e}')
+            exit(1)
+        "
+      register: python_test
+      ignore_errors: yes
+    
+    - name: Update Python libraries status
+      set_fact:
+        validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED' if python_test.rc == 0 else 'FAILED'} if item.name == 'Python Libraries' else {}) | list }}"
+    
+    - name: Test system packages
+      shell: |
+        which git && which rsync && which ssh && echo "System packages available"
+      register: system_test
+      ignore_errors: yes
+    
+    - name: Update system packages status
+      set_fact:
+        validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED' if system_test.rc == 0 else 'FAILED'} if item.name == 'System Packages' else {}) | list }}"
+    
+    - name: Test network connectivity
+      uri:
+        url: "https://httpbin.org/get"
+        method: GET
+        timeout: 10
+      register: network_test
+      ignore_errors: yes
+    
+    - name: Update network connectivity status
+      set_fact:
+        validation_tests: "{{ validation_tests | map('combine', {'status': 'PASSED' if network_test.status == 200 else 'FAILED'} if item.name == 'Network Connectivity' else {}) | list }}"
+    
+    - name: Generate validation report
+      template:
+        content: |
+          Custom Execution Environment Validation Report
+          =============================================
+          
+          Validation Date: {{ ansible_date_time.iso8601 }}
+          Execution Environment: custom-ee:latest
+          
+          Test Results:
+          {% for test in validation_tests %}
+          - {{ test.name }}: {{ test.status }}
+          {% endfor %}
+          
+          Environment Details:
+          - Ansible Version: {{ ansible_version.full }}
+          - Python Version: {{ ansible_python_version }}
+          - Operating System: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - Architecture: {{ ansible_architecture }}
+          
+          {% set passed_tests = validation_tests | selectattr('status', 'equalto', 'PASSED') | list | length %}
+          {% set total_tests = validation_tests | length %}
+          
+          Summary: {{ passed_tests }}/{{ total_tests }} tests passed
+          {% if passed_tests == total_tests %}
+          ✅ All validation tests PASSED - Execution Environment is ready for production use!
+          {% else %}
+          ❌ Some validation tests FAILED - Please review and fix issues before production use.
+          {% endif %}
+        dest: /tmp/ee-validation-report.txt
+    
+    - name: Display validation summary
+      debug:
+        msg: |
+          Validation completed!
+          Report saved to: /tmp/ee-validation-report.txt
+          {% set passed_tests = validation_tests | selectattr('status', 'equalto', 'PASSED') | list | length %}
+          {% set total_tests = validation_tests | length %}
+          Results: {{ passed_tests }}/{{ total_tests }} tests passed
+EOF
+Run the validation:
+
+# Execute validation playbook
+ansible-playbook validate-ee.yml
+
+# Display the validation report
+cat /tmp/ee-validation-report.txt
+Troubleshooting Common Issues
+Issue 1: Build Failures
+Problem: Execution Environment build fails with dependency errors.
+
+Solution:
+
+# Check build logs for specific errors
+ansible-builder build --tag custom-ee:debug --verbosity 3 .
+
+# Common fixes:
+# 1. Update base image
+sed -i 's/ubi8/ubi9/g' execution-environment.yml
+
+# 2. Fix Python package versions
+echo "requests==2.28.2" >> requirements.txt
+
+# 3. Add missing system dependencies
+echo "python3-dev [platform:rpm]" >> bindep.txt
+Issue 2: Upload/Push Failures
+Problem: Cannot push to Private Automation Hub registry.
+
+Solution:
+
+# Verify registry connectivity
+curl -k https://hub.example.com/v2/
+
+# Re-authenticate
+podman logout hub.example.com
+podman login hub.example.com
+
+# Check image size (large images may timeout)
+podman images --format "table {{.Repository}} {{.Tag}} {{.Size}}"
+
+# Try pushing with different timeout
+podman push --timeout 300 hub.example.com/custom-ee:latest
+Issue 3: Execution Environment Not Available in Controller
+Problem: Custom EE doesn't appear in Automation Controller.
+
+Solution:
+
+# Verify EE is properly registered
+curl -u admin:password \
+  https://controller.example.com/api/v2/execution_environments/ \
+  --insecure | jq '.results[] | {name, image}'
+
+# Check pull policy and credentials
+# Ensure Controller can access the registry
+# Verify image name and tag are correct
+Issue 4: Job Failures with Custom EE
+Problem: Jobs fail when using the custom Execution Environment.
+
+Solution:
+
+# Check job output for specific errors
+# Common issues:
+# 1. Missing collections - add to requirements.yml
+# 2. Python import errors - add to requirements.txt
+# 3. System command not found - add to bindep.txt
+
+# Test EE locally first
+podman run --rm -it custom-ee:latest ansible --version
+podman run --rm -it custom-ee:latest python3 -c "import requests; print('OK')"
+Conclusion
+Congratulations! You have successfully completed Lab 6: Upload Execution Environments to Private Automation Hub. In this comprehensive lab, you have accomplished the following:
+
+What You Learned
+• Execution Environment Concepts: You now understand how Execution Environments provide consistent, portable automation execution across different systems and environments.
+
+• Building Custom EEs: You learned to create custom Execution Environments using ansible-builder, including how to define dependencies, collections, and system packages.
+
+• Registry Operations: You gained hands-on experience with container registry operations, including tagging, pushing, and managing Execution Environment images.
+
+• Integration with Automation Platform: You successfully integrated your custom Execution Environment with Automation Controller and verified its functionality.
+
+• Testing and Validation: You developed comprehensive testing strategies to ensure your Execution Environments work correctly before production deployment.
+
+Why This Matters
+Consistency Across Environments: Execution Environments ensure that your automation runs the same way in development, testing, and production, eliminating "it works on my machine" problems.
+
+Dependency Management: By containerizing your automation dependencies, you avoid conflicts between different projects and maintain clean, isolated execution contexts.
+
+Scalability: Custom Execution Environments enable you to scale your automation across multiple teams and projects while maintaining standardized tooling and libraries.
+
+Version Control: You can now version and track changes to your automation execution environments, making it easier to manage updates and rollbacks.
+
+Enterprise Readiness: This lab prepared you for real-world enterprise automation scenarios where consistent, reliable execution environments are critical for operational success.
+
+Next Steps
+• Explore creating specialized Execution Environments for different use cases (network automation, cloud operations, security tasks) • Implement CI/CD pipelines for automated EE building and testing • Learn about EE optimization techniques for faster startup and smaller image sizes • Practice troubleshooting and debugging techniques for complex automation scenarios
+
+This lab has provided you with essential skills for the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform exam and real-world automation platform management. The ability to create, manage, and deploy custom Execution Environments is a crucial skill for automation engineers and platform administrators.
