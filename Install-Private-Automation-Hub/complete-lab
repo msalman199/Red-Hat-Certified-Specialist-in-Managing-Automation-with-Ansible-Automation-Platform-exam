@@ -1,0 +1,559 @@
+Lab 1: Install Private Automation Hub
+Objectives
+By the end of this lab, you will be able to:
+
+Install and configure the Private Automation Hub on a Red Hat Enterprise Linux (RHEL) server
+Verify the installation through the web interface
+Connect the Private Automation Hub to the Automation Controller
+Understand the role of Private Automation Hub in managing Ansible content collections
+Configure basic authentication and user management for the hub
+Prerequisites
+Before starting this lab, you should have:
+
+Basic understanding of Linux command line operations
+Familiarity with RHEL/CentOS system administration
+Knowledge of Ansible fundamentals and collections
+Understanding of web services and HTTP protocols
+Basic networking concepts (ports, firewalls, DNS)
+Technical Requirements:
+
+RHEL 8 or 9 server with minimum 4GB RAM and 20GB disk space
+Root or sudo access to the server
+Internet connectivity for downloading packages
+Web browser for accessing the hub interface
+Lab Environment Setup
+Good News! Al Nafi provides ready-to-use Linux-based cloud machines for this lab. Simply click Start Lab and you'll have access to a pre-configured RHEL server. No need to build your own virtual machine or worry about initial setup.
+
+Your lab environment includes:
+
+RHEL 9 server with internet access
+Pre-installed Python 3 and pip
+Firewall configured for lab requirements
+All necessary system dependencies
+Task 1: Prepare the System Environment
+Subtask 1.1: Update System and Install Dependencies
+First, let's ensure our system is up-to-date and has all required dependencies.
+
+# Update the system packages
+sudo dnf update -y
+
+# Install required packages
+sudo dnf install -y python3 python3-pip git wget curl
+
+# Install additional development tools
+sudo dnf groupinstall -y "Development Tools"
+
+# Install PostgreSQL (required for Private Automation Hub)
+sudo dnf install -y postgresql postgresql-server postgresql-contrib
+
+# Install Redis (required for task queue management)
+sudo dnf install -y redis
+
+# Install Nginx (for reverse proxy)
+sudo dnf install -y nginx
+Subtask 1.2: Configure PostgreSQL Database
+The Private Automation Hub requires a PostgreSQL database for storing metadata and user information.
+
+# Initialize PostgreSQL database
+sudo postgresql-setup --initdb
+
+# Start and enable PostgreSQL service
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Switch to postgres user and create database
+sudo -u postgres psql << EOF
+CREATE DATABASE automationhub;
+CREATE USER automationhub WITH PASSWORD 'secure_password123';
+GRANT ALL PRIVILEGES ON DATABASE automationhub TO automationhub;
+ALTER USER automationhub CREATEDB;
+\q
+EOF
+Subtask 1.3: Configure Redis Service
+Redis is used for caching and task queue management.
+
+# Start and enable Redis service
+sudo systemctl start redis
+sudo systemctl enable redis
+
+# Verify Redis is running
+redis-cli ping
+Expected output: PONG
+
+Task 2: Install Private Automation Hub
+Subtask 2.1: Create Installation Directory and User
+# Create a dedicated user for automation hub
+sudo useradd -r -s /bin/bash -d /opt/automationhub automationhub
+
+# Create installation directory
+sudo mkdir -p /opt/automationhub
+sudo chown automationhub:automationhub /opt/automationhub
+
+# Switch to automation hub user
+sudo su - automationhub
+Subtask 2.2: Install Galaxy NG (Open Source Private Automation Hub)
+Since we're using open-source tools, we'll install galaxy_ng, which is the open-source version of Private Automation Hub.
+
+# Create Python virtual environment
+python3 -m venv /opt/automationhub/venv
+source /opt/automationhub/venv/bin/activate
+
+# Upgrade pip
+pip install --upgrade pip
+
+# Install galaxy_ng and dependencies
+pip install galaxy-ng[ldap]
+pip install gunicorn
+pip install psycopg2-binary
+
+# Install additional required packages
+pip install django-cors-headers
+pip install pulp-ansible
+Subtask 2.3: Configure Galaxy NG Settings
+Create the configuration file for Galaxy NG:
+
+# Create settings directory
+mkdir -p /opt/automationhub/config
+
+# Create the main settings file
+cat > /opt/automationhub/config/settings.py << 'EOF'
+import os
+from galaxy_ng.app.settings.base import *
+
+# Database configuration
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'automationhub',
+        'USER': 'automationhub',
+        'PASSWORD': 'secure_password123',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+
+# Redis configuration
+REDIS_URL = "redis://localhost:6379/0"
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': REDIS_URL,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        }
+    }
+}
+
+# Security settings
+SECRET_KEY = 'your-secret-key-change-this-in-production'
+DEBUG = False
+ALLOWED_HOSTS = ['*']
+
+# Static files
+STATIC_URL = '/static/'
+STATIC_ROOT = '/opt/automationhub/static/'
+
+# Media files
+MEDIA_URL = '/media/'
+MEDIA_ROOT = '/opt/automationhub/media/'
+
+# Galaxy NG specific settings
+GALAXY_API_ROOT = '/api/galaxy/'
+CONTENT_ORIGIN = 'http://localhost:8080'
+
+# Authentication
+GALAXY_AUTHENTICATION_CLASSES = [
+    'galaxy_ng.app.auth.session.SessionAuthentication',
+    'ansible_base.authentication.authenticators.BasicAuthentication',
+]
+
+# CORS settings
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
+
+# Logging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': '/opt/automationhub/logs/galaxy.log',
+        },
+    },
+    'loggers': {
+        'galaxy_ng': {
+            'handlers': ['file'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+}
+EOF
+Subtask 2.4: Initialize the Database
+# Create logs directory
+mkdir -p /opt/automationhub/logs
+
+# Set Django settings module
+export DJANGO_SETTINGS_MODULE=settings
+export PYTHONPATH=/opt/automationhub/config:$PYTHONPATH
+
+# Navigate to config directory
+cd /opt/automationhub/config
+
+# Run database migrations
+python -m django migrate --settings=settings
+
+# Create static files directory
+mkdir -p /opt/automationhub/static
+
+# Collect static files
+python -m django collectstatic --noinput --settings=settings
+
+# Create superuser account
+python -m django createsuperuser --settings=settings
+When prompted, create an admin user:
+
+Username: admin
+Email: admin@example.com
+Password: admin123 (use a strong password in production)
+Task 3: Configure Web Server and Services
+Subtask 3.1: Create Systemd Service Files
+Exit from the automationhub user and return to your regular user with sudo access:
+
+exit  # Exit from automationhub user
+Create systemd service files for Galaxy NG:
+
+# Create the main Galaxy NG service
+sudo tee /etc/systemd/system/galaxy-ng.service << 'EOF'
+[Unit]
+Description=Galaxy NG API Server
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=notify
+User=automationhub
+Group=automationhub
+WorkingDirectory=/opt/automationhub/config
+Environment=DJANGO_SETTINGS_MODULE=settings
+Environment=PYTHONPATH=/opt/automationhub/config
+ExecStart=/opt/automationhub/venv/bin/gunicorn galaxy_ng.app.wsgi:application \
+    --bind 127.0.0.1:8080 \
+    --workers 4 \
+    --timeout 120 \
+    --max-requests 1000 \
+    --max-requests-jitter 100
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create worker service for background tasks
+sudo tee /etc/systemd/system/galaxy-ng-worker.service << 'EOF'
+[Unit]
+Description=Galaxy NG Worker
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=automationhub
+Group=automationhub
+WorkingDirectory=/opt/automationhub/config
+Environment=DJANGO_SETTINGS_MODULE=settings
+Environment=PYTHONPATH=/opt/automationhub/config
+ExecStart=/opt/automationhub/venv/bin/python -m django rq worker --settings=settings
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+Subtask 3.2: Configure Nginx Reverse Proxy
+# Create Nginx configuration for Galaxy NG
+sudo tee /etc/nginx/conf.d/galaxy-ng.conf << 'EOF'
+server {
+    listen 80;
+    server_name localhost;
+    client_max_body_size 100M;
+
+    location /static/ {
+        alias /opt/automationhub/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location /media/ {
+        alias /opt/automationhub/media/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+EOF
+
+# Test Nginx configuration
+sudo nginx -t
+
+# Remove default Nginx site
+sudo rm -f /etc/nginx/conf.d/default.conf
+Subtask 3.3: Configure Firewall
+# Open HTTP port
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-port=8080/tcp
+sudo firewall-cmd --reload
+
+# Verify firewall rules
+sudo firewall-cmd --list-all
+Task 4: Start and Verify Services
+Subtask 4.1: Start All Services
+# Reload systemd daemon
+sudo systemctl daemon-reload
+
+# Start and enable all services
+sudo systemctl start galaxy-ng
+sudo systemctl enable galaxy-ng
+
+sudo systemctl start galaxy-ng-worker
+sudo systemctl enable galaxy-ng-worker
+
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+# Check service status
+sudo systemctl status galaxy-ng
+sudo systemctl status galaxy-ng-worker
+sudo systemctl status nginx
+Subtask 4.2: Verify Installation via Web Interface
+Open your web browser and navigate to: http://your-server-ip
+
+You should see the Galaxy NG login page
+
+Log in using the admin credentials you created earlier:
+
+Username: admin
+Password: admin123
+After successful login, you should see the Galaxy NG dashboard with sections for:
+
+Collections: Manage Ansible collections
+Namespaces: Organize collections by namespace
+Users: Manage user accounts
+Groups: Manage user groups and permissions
+Subtask 4.3: Test API Endpoints
+Verify that the API is working correctly:
+
+# Test the API root endpoint
+curl -u admin:admin123 http://localhost/api/galaxy/v3/
+
+# Test collections endpoint
+curl -u admin:admin123 http://localhost/api/galaxy/v3/collections/
+
+# Test namespaces endpoint
+curl -u admin:admin123 http://localhost/api/galaxy/v3/namespaces/
+Expected output should be JSON responses with API information.
+
+Task 5: Connect Hub to Automation Controller
+Subtask 5.1: Configure Authentication Token
+First, create an API token for the Automation Controller to use:
+
+In the Galaxy NG web interface, navigate to User Settings → API Tokens
+
+Click Create Token and provide:
+
+Name: automation-controller-token
+Description: Token for Automation Controller integration
+Copy the generated token (you'll need this for the controller configuration)
+
+Subtask 5.2: Configure Automation Controller (Simulation)
+Since this is a lab environment, we'll simulate the controller configuration. In a real environment, you would configure this in the Automation Controller web interface:
+
+# Create a configuration file that shows how to connect to our hub
+cat > /opt/automationhub/controller-config.yml << 'EOF'
+# Automation Controller Configuration for Private Automation Hub
+# This would be configured in the Automation Controller web interface
+
+automation_hub_url: "http://your-server-ip/api/galaxy/"
+automation_hub_auth_url: "http://your-server-ip/api/galaxy/v3/"
+automation_hub_token: "your-api-token-here"
+automation_hub_ssl_verify: false  # Set to true in production with proper SSL
+
+# Collections configuration
+collections:
+  - name: community.general
+    source: automation_hub
+  - name: ansible.posix
+    source: automation_hub
+EOF
+
+echo "Configuration file created at /opt/automationhub/controller-config.yml"
+echo "Use this configuration in your Automation Controller settings"
+Subtask 5.3: Test Collection Upload
+Let's test uploading a collection to verify everything is working:
+
+# Switch to automationhub user
+sudo su - automationhub
+source /opt/automationhub/venv/bin/activate
+
+# Install ansible-core for collection management
+pip install ansible-core
+
+# Create a test namespace and collection
+mkdir -p /tmp/test_collection/my_namespace/my_collection
+
+# Create collection metadata
+cat > /tmp/test_collection/my_namespace/my_collection/galaxy.yml << 'EOF'
+namespace: my_namespace
+name: my_collection
+version: 1.0.0
+description: Test collection for Private Automation Hub
+authors:
+  - Test Author <test@example.com>
+license:
+  - MIT
+tags:
+  - test
+  - demo
+dependencies: {}
+EOF
+
+# Create a simple module
+mkdir -p /tmp/test_collection/my_namespace/my_collection/plugins/modules
+cat > /tmp/test_collection/my_namespace/my_collection/plugins/modules/hello.py << 'EOF'
+#!/usr/bin/python
+from ansible.module_utils.basic import AnsibleModule
+
+def main():
+    module = AnsibleModule(
+        argument_spec=dict(
+            name=dict(type='str', default='World')
+        )
+    )
+    
+    name = module.params['name']
+    result = dict(
+        changed=False,
+        message=f'Hello, {name}!'
+    )
+    
+    module.exit_json(**result)
+
+if __name__ == '__main__':
+    main()
+EOF
+
+# Build the collection
+cd /tmp/test_collection/my_namespace/my_collection
+ansible-galaxy collection build
+
+# The collection tarball will be created in the current directory
+ls -la *.tar.gz
+Troubleshooting Common Issues
+Issue 1: Service Won't Start
+If Galaxy NG service fails to start:
+
+# Check service logs
+sudo journalctl -u galaxy-ng -f
+
+# Check if database is accessible
+sudo -u automationhub psql -h localhost -U automationhub -d automationhub -c "SELECT 1;"
+
+# Verify Redis is running
+redis-cli ping
+Issue 2: Web Interface Not Accessible
+If you can't access the web interface:
+
+# Check if services are running
+sudo systemctl status nginx galaxy-ng
+
+# Check if ports are open
+sudo netstat -tlnp | grep -E ':(80|8080)'
+
+# Check firewall rules
+sudo firewall-cmd --list-all
+Issue 3: Database Connection Issues
+If there are database connection problems:
+
+# Check PostgreSQL status
+sudo systemctl status postgresql
+
+# Verify database exists
+sudo -u postgres psql -l | grep automationhub
+
+# Test database connection
+sudo -u automationhub psql -h localhost -U automationhub -d automationhub
+Issue 4: Permission Errors
+If you encounter permission errors:
+
+# Fix ownership of automation hub files
+sudo chown -R automationhub:automationhub /opt/automationhub
+
+# Fix permissions for static files
+sudo chmod -R 755 /opt/automationhub/static
+sudo chmod -R 755 /opt/automationhub/media
+Verification Checklist
+Before concluding the lab, verify the following:
+
+ PostgreSQL service is running and accessible
+ Redis service is running
+ Galaxy NG service is running without errors
+ Galaxy NG worker service is running
+ Nginx is running and properly configured
+ Web interface is accessible via browser
+ Admin user can log in successfully
+ API endpoints respond correctly
+ Firewall allows HTTP traffic
+ All log files show no critical errors
+Conclusion
+Congratulations! You have successfully completed the installation and configuration of a Private Automation Hub using open-source tools. Here's what you accomplished:
+
+Key Achievements:
+
+System Preparation: You prepared a RHEL server with all necessary dependencies including PostgreSQL, Redis, and Nginx.
+
+Private Automation Hub Installation: You installed Galaxy NG, the open-source version of Private Automation Hub, which provides the same core functionality for managing Ansible collections.
+
+Database Configuration: You configured PostgreSQL to store hub metadata and user information securely.
+
+Web Interface Setup: You configured Nginx as a reverse proxy and verified access to the web-based management interface.
+
+Service Integration: You created systemd services for automated startup and management of all components.
+
+API Verification: You tested the REST API endpoints that allow programmatic access to the hub.
+
+Controller Integration: You learned how to configure the connection between the Private Automation Hub and Automation Controller.
+
+Why This Matters:
+
+Content Management: Private Automation Hub provides centralized management of Ansible collections, ensuring consistent and approved content across your organization.
+
+Security: By hosting your own hub, you maintain control over your automation content and can implement your organization's security policies.
+
+Offline Operations: A private hub enables automation in air-gapped environments where internet access is restricted.
+
+Performance: Local content distribution reduces download times and network dependencies for your automation workflows.
+
+Compliance: Organizations can ensure all automation content meets their compliance and governance requirements.
+
+Next Steps:
+
+Upload and manage your organization's custom collections
+Configure user authentication and authorization
+Set up collection signing for enhanced security
+Integrate with your CI/CD pipelines for automated collection publishing
+Configure SSL/TLS for production deployments
+This Private Automation Hub installation provides the foundation for enterprise-scale Ansible content management and distribution in your automation infrastructure.
