@@ -1,0 +1,23 @@
+namespace: my_namespace
+name: my_collection
+version: 1.1.0
+readme: README.md
+authors:
+  - "Lab Student <student@example.com>"
+description: "A sample collection for Private Automation Hub lab"
+license:
+  - "Apache-2.0"
+license_file: ''
+tags:
+  - web
+  - apache
+  - sample
+dependencies: {}
+repository: "https://github.com/example/my_collection"
+documentation: "https://github.com/example/my_collection"
+homepage: "https://github.com/example/my_collection"
+issues: "https://github.com/example/my_collection/issues"
+build_ignore:
+  - "*.tar.gz"
+  - ".git"
+  - ".gitignore"

@@ -1,0 +1,31 @@
+---
+- name: Install Apache web server
+  package:
+    name: httpd
+    state: present
+  become: yes
+
+- name: Start and enable Apache
+  service:
+    name: httpd
+    state: started
+    enabled: yes
+  become: yes
+  notify: restart apache
+
+- name: Create index.html from template
+  template:
+    src: index.html.j2
+    dest: /var/www/html/index.html
+  become: yes
+  notify: restart apache
+
+- name: Create a custom configuration file
+  copy:
+    content: |
+      # Custom Apache configuration
+      ServerTokens Prod
+      ServerSignature Off
+    dest: /etc/httpd/conf.d/security.conf
+  become: yes
+  notify: restart apache

@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ server_name | default('My Web Server') }}</title>
+</head>
+<body>
+    <h1>Welcome to {{ server_name | default('My Web Server') }}</h1>
+    <p>This server was configured using Ansible!</p>
+    <p>Server hostname: {{ ansible_hostname }}</p>
+</body>
+</html>
