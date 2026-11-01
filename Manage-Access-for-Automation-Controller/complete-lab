@@ -1,0 +1,426 @@
+Lab 11: Manage Access for Automation Controller
+Objectives
+By the end of this lab, you will be able to:
+
+Create and manage users and teams in Ansible Automation Controller
+Configure role-based access control (RBAC) for different user types
+Assign appropriate permissions to users and teams based on organizational roles
+Test access control by logging in with different user accounts
+Understand the security implications of proper access management
+Implement best practices for user and team management in enterprise automation environments
+Prerequisites
+Before starting this lab, you should have:
+
+Basic understanding of Linux command line operations
+Familiarity with Ansible concepts and terminology
+Knowledge of user management principles
+Understanding of role-based access control concepts
+Completed previous Ansible Automation Controller labs or equivalent experience
+Basic understanding of web-based administration interfaces
+Lab Environment
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines with Ansible Automation Controller already installed and running. Simply click Start Lab to access your environment - no need to build your own VM or install software.
+
+Your lab environment includes:
+
+CentOS/RHEL 8 or 9 based system
+Ansible Automation Controller (AWX) pre-installed
+Web browser access to the Controller interface
+Administrative access to create users and manage permissions
+Task 1: Create Users and Teams
+Subtask 1.1: Access the Automation Controller Interface
+Open your web browser and navigate to the Automation Controller interface:
+# The URL will be provided in your lab environment
+# Typically: https://your-controller-hostname
+Log in with the administrative credentials provided in your lab environment
+
+Once logged in, familiarize yourself with the main dashboard and navigation menu
+
+Subtask 1.2: Create Individual Users
+Navigate to Access → Users in the left sidebar
+
+Click the Add button (+ icon) to create a new user
+
+Create the first user with the following details:
+
+Username: developer1
+Email: developer1@company.com
+First Name: John
+Last Name: Developer
+Password: SecurePass123!
+Confirm Password: SecurePass123!
+User Type: Normal User
+Click Save to create the user
+
+Repeat the process to create additional users:
+
+User 2 - Operations Team Member:
+
+Username: ops1
+Email: ops1@company.com
+First Name: Sarah
+Last Name: Operations
+Password: SecurePass123!
+Confirm Password: SecurePass123!
+User Type: Normal User
+User 3 - Team Lead:
+
+Username: teamlead1
+Email: teamlead1@company.com
+First Name: Mike
+Last Name: Leader
+Password: SecurePass123!
+Confirm Password: SecurePass123!
+User Type: Normal User
+User 4 - Auditor:
+
+Username: auditor1
+Email: auditor1@company.com
+First Name: Lisa
+Last Name: Auditor
+Password: SecurePass123!
+Confirm Password: SecurePass123!
+User Type: Normal User
+Subtask 1.3: Create Teams
+Navigate to Access → Teams in the left sidebar
+
+Click the Add button to create a new team
+
+Create the first team:
+
+Name: Development Team
+Description: Team responsible for application development and testing
+Organization: Default (or your organization name)
+Click Save
+
+Create additional teams:
+
+Operations Team:
+
+Name: Operations Team
+Description: Team responsible for production operations and maintenance
+Organization: Default
+Security Team:
+
+Name: Security Team
+Description: Team responsible for security auditing and compliance
+Organization: Default
+Subtask 1.4: Add Users to Teams
+Click on the Development Team you just created
+
+Navigate to the Users tab within the team details
+
+Click Add to add users to the team
+
+Select developer1 and teamlead1 from the user list
+
+Click Save
+
+Repeat for the Operations Team:
+
+Add ops1 and teamlead1
+For the Security Team:
+
+Add auditor1
+Task 2: Assign Permissions Based on Roles
+Subtask 2.1: Create Projects for Permission Testing
+Navigate to Resources → Projects
+
+Create a test project:
+
+Name: Web Application Project
+Description: Sample web application deployment project
+Organization: Default
+SCM Type: Git
+SCM URL: https://github.com/ansible/ansible-examples.git
+SCM Branch/Tag/Commit: master
+Click Save
+Subtask 2.2: Create Inventories for Permission Testing
+Navigate to Resources → Inventories
+
+Create test inventories:
+
+Development Inventory:
+
+Name: Development Servers
+Description: Development environment servers
+Organization: Default
+Production Inventory:
+
+Name: Production Servers
+Description: Production environment servers
+Organization: Default
+Add some sample hosts to each inventory:
+For Development Servers:
+
+dev-web-01
+dev-db-01
+For Production Servers:
+
+prod-web-01
+prod-web-02
+prod-db-01
+Subtask 2.3: Assign Team-Level Permissions
+Navigate to Access → Teams
+
+Click on Development Team
+
+Go to the Permissions tab
+
+Click Add to assign permissions
+
+Assign the following permissions to the Development Team:
+
+Resource Type: Project
+Resource: Web Application Project
+Role: Use
+Resource Type: Inventory
+Resource: Development Servers
+Role: Use
+Resource Type: Inventory
+Resource: Development Servers
+Role: Ad Hoc
+For the Operations Team, assign:
+Resource Type: Project
+Resource: Web Application Project
+Role: Use
+Resource Type: Inventory
+Resource: Production Servers
+Role: Use
+Resource Type: Inventory
+Resource: Production Servers
+Role: Update
+For the Security Team, assign:
+Resource Type: Project
+Resource: Web Application Project
+Role: Read
+Resource Type: Inventory
+Resource: Development Servers
+Role: Read
+Resource Type: Inventory
+Resource: Production Servers
+Role: Read
+Subtask 2.4: Assign Individual User Permissions
+Navigate to Access → Users
+
+Click on teamlead1
+
+Go to the Permissions tab
+
+Assign additional permissions to the team lead:
+
+Resource Type: Organization
+Resource: Default
+Role: Project Admin
+Resource Type: Inventory
+Resource: Development Servers
+Role: Admin
+For the auditor1 user, assign:
+Resource Type: Organization
+Resource: Default
+Role: Auditor
+Subtask 2.5: Create Job Templates with Restricted Access
+Navigate to Resources → Templates
+
+Create a job template for development:
+
+Name: Deploy to Development
+Job Type: Run
+Inventory: Development Servers
+Project: Web Application Project
+Playbook: lamp_simple/site.yml
+Credentials: (Select appropriate credential)
+In the Permissions tab of this template, add:
+Team: Development Team
+Role: Execute
+Create a production deployment template:
+Name: Deploy to Production
+Job Type: Run
+Inventory: Production Servers
+Project: Web Application Project
+Playbook: lamp_simple/site.yml
+Credentials: (Select appropriate credential)
+In the Permissions tab, add:
+Team: Operations Team
+Role: Execute
+User: teamlead1
+Role: Execute
+Task 3: Test the System by Logging in with Different User Roles
+Subtask 3.1: Test Developer Access
+Log out of the current administrative session
+
+Log in as developer1 with the password SecurePass123!
+
+Verify the following access patterns:
+
+Should be able to:
+
+View the Development Servers inventory
+View the Web Application Project
+Execute the "Deploy to Development" job template
+Run ad-hoc commands against development servers
+Should NOT be able to:
+
+View Production Servers inventory
+Execute production deployment templates
+Create new projects or inventories
+Modify user permissions
+Test by attempting to:
+Navigate to Resources → Inventories
+Verify you can only see "Development Servers"
+Try to run the "Deploy to Development" template
+Attempt to access Access → Users (should be restricted)
+Subtask 3.2: Test Operations Team Access
+Log out and log in as ops1
+
+Verify access patterns:
+
+Should be able to:
+
+View Production Servers inventory
+Execute production deployment templates
+Update inventory information
+View job results and logs
+Should NOT be able to:
+
+Modify development resources
+Create users or teams
+Access sensitive configuration data
+Test by:
+Navigating to Production Servers inventory
+Attempting to edit host information
+Running the "Deploy to Production" template
+Trying to access development resources (should be restricted)
+Subtask 3.3: Test Team Lead Access
+Log out and log in as teamlead1
+
+Verify enhanced permissions:
+
+Should be able to:
+
+Access both development and production resources
+Create and modify projects within the organization
+Manage inventory for development servers
+Execute templates for both environments
+Should NOT be able to:
+
+Create users or modify system-wide settings
+Access administrative functions
+Modify other users' permissions
+Test by:
+Creating a new project
+Modifying development inventory
+Executing both development and production templates
+Subtask 3.4: Test Auditor Access
+Log out and log in as auditor1
+
+Verify read-only access:
+
+Should be able to:
+
+View all projects and inventories
+See job execution history and logs
+Access audit trails and reports
+View user and team configurations
+Should NOT be able to:
+
+Execute any job templates
+Modify any resources
+Create or delete items
+Change permissions
+Test by:
+Viewing job history across all templates
+Attempting to execute a template (should be blocked)
+Trying to modify any resource (should be read-only)
+Subtask 3.5: Document Access Control Results
+Create a simple test matrix to document your findings:
+
+# Create a test results file
+cat > access_control_test_results.txt << EOF
+Access Control Test Results
+===========================
+
+User: developer1
+- Development Inventory Access: [PASS/FAIL]
+- Production Inventory Access: [PASS/FAIL - Should FAIL]
+- Development Template Execution: [PASS/FAIL]
+- Production Template Execution: [PASS/FAIL - Should FAIL]
+- User Management Access: [PASS/FAIL - Should FAIL]
+
+User: ops1
+- Development Inventory Access: [PASS/FAIL - Should FAIL]
+- Production Inventory Access: [PASS/FAIL]
+- Production Template Execution: [PASS/FAIL]
+- Inventory Modification: [PASS/FAIL]
+
+User: teamlead1
+- Cross-Environment Access: [PASS/FAIL]
+- Project Creation: [PASS/FAIL]
+- Inventory Administration: [PASS/FAIL]
+- User Management: [PASS/FAIL - Should FAIL]
+
+User: auditor1
+- Read Access to All Resources: [PASS/FAIL]
+- Template Execution: [PASS/FAIL - Should FAIL]
+- Resource Modification: [PASS/FAIL - Should FAIL]
+- Audit Log Access: [PASS/FAIL]
+EOF
+Troubleshooting Tips
+Common Issues and Solutions
+Issue 1: Users cannot log in
+
+# Check user status in the Users interface
+# Ensure passwords meet complexity requirements
+# Verify user type is set correctly
+Issue 2: Permissions not working as expected
+
+Verify team membership is correctly assigned
+Check that permissions are assigned to the correct resource type
+Ensure the organization context is correct
+Remember that permissions are additive - users get permissions from both individual assignments and team memberships
+Issue 3: Templates not visible to users
+
+Check that users have appropriate permissions on the underlying resources (project, inventory, credentials)
+Verify template-specific permissions are assigned
+Ensure the template is associated with the correct organization
+Issue 4: Cannot execute job templates
+
+Verify users have "Execute" permission on the template
+Check that users have "Use" permission on associated project and inventory
+Ensure proper credentials are assigned and accessible
+Verification Commands
+To verify your setup from the command line (if you have shell access):
+
+# Check AWX/Controller service status
+sudo systemctl status automation-controller
+
+# View user creation in logs
+sudo journalctl -u automation-controller | grep -i user
+
+# Check database for user entries (if using PostgreSQL)
+sudo -u postgres psql awx -c "SELECT username, email, is_active FROM auth_user;"
+Best Practices Implemented
+Throughout this lab, you've implemented several security best practices:
+
+Principle of Least Privilege: Users only receive the minimum permissions necessary for their role
+Role-Based Access Control: Permissions are assigned based on job functions rather than individuals
+Separation of Duties: Development and production environments have different access controls
+Audit Trail: All actions are logged and auditable
+Team-Based Management: Using teams simplifies permission management at scale
+Conclusion
+In this comprehensive lab, you have successfully:
+
+Created a structured user management system with four different user types representing common organizational roles
+Implemented team-based access control that reflects real-world organizational structures
+Configured granular permissions that enforce separation between development and production environments
+Tested role-based access control by logging in as different users and verifying their access levels
+Established security best practices including least privilege access and proper audit controls
+This access control framework is crucial for enterprise automation environments because it:
+
+Prevents unauthorized access to critical production systems
+Enables compliance with security policies and regulatory requirements
+Supports scalable user management through team-based permissions
+Provides audit capabilities for security and compliance reporting
+Reduces security risks by limiting user access to only necessary resources
+The skills you've developed in this lab are directly applicable to the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform exam and are essential for managing enterprise automation platforms in production environments. Understanding how to properly configure access control is fundamental to maintaining secure, compliant, and well-governed automation infrastructure.
+
+Remember that access control is an ongoing process - regularly review user permissions, remove access for users who no longer need it, and adjust permissions as organizational roles and responsibilities change.
