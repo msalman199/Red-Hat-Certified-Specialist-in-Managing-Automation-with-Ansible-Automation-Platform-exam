@@ -1,0 +1,424 @@
+Lab 8: Create Groups and Assign Permissions
+Objectives
+By the end of this lab, students will be able to:
+
+Create and manage user groups in Linux systems
+Understand the principle of least privilege in access control
+Assign appropriate permissions to different user groups based on their roles
+Configure group-based access control for files and directories
+Test and verify user access permissions
+Implement role-based security models using Linux groups
+Troubleshoot common permission-related issues
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command line interface
+Knowledge of file and directory permissions (rwx)
+Familiarity with user management concepts
+Understanding of sudo privileges
+Basic knowledge of text editors (nano, vim, or vi)
+Completed previous labs on user management
+Lab Environment
+Al Nafi Cloud Machines: This lab uses Linux-based cloud machines provided by Al Nafi. Simply click Start Lab to access your pre-configured environment. No need to build your own virtual machine.
+
+System Requirements:
+
+CentOS/RHEL 8+ or Ubuntu 20.04+ system
+Root or sudo access
+Terminal access
+Lab Overview
+In this advanced lab, you will implement a comprehensive group-based permission system that mirrors real-world enterprise environments. You'll create three distinct user groups with different access levels and test the security boundaries between them.
+
+Task 1: Create User Groups
+Subtask 1.1: Create Administrative Group
+First, let's create the admins group that will have elevated privileges.
+
+# Create the admins group
+sudo groupadd admins
+
+# Verify the group was created
+getent group admins
+Expected Output:
+
+admins:x:1001:
+Subtask 1.2: Create Developers Group
+Create the developers group for users who need development access.
+
+# Create the developers group
+sudo groupadd developers
+
+# Verify the group was created
+getent group developers
+Subtask 1.3: Create Viewers Group
+Create the viewers group for users with read-only access.
+
+# Create the viewers group
+sudo groupadd viewers
+
+# Verify all groups were created
+getent group | grep -E "(admins|developers|viewers)"
+Expected Output:
+
+admins:x:1001:
+developers:x:1002:
+viewers:x:1003:
+Subtask 1.4: Create Test Users
+Create test users for each group to demonstrate permissions.
+
+# Create admin user
+sudo useradd -m -s /bin/bash admin_user
+sudo passwd admin_user
+
+# Create developer user
+sudo useradd -m -s /bin/bash dev_user
+sudo passwd dev_user
+
+# Create viewer user
+sudo useradd -m -s /bin/bash view_user
+sudo passwd view_user
+Note: Set simple passwords like Password123! for testing purposes.
+
+Subtask 1.5: Add Users to Groups
+Assign users to their respective groups.
+
+# Add users to their primary groups
+sudo usermod -a -G admins admin_user
+sudo usermod -a -G developers dev_user
+sudo usermod -a -G viewers view_user
+
+# Verify group memberships
+groups admin_user
+groups dev_user
+groups view_user
+Task 2: Assign Appropriate Permissions for Each Group
+Subtask 2.1: Create Directory Structure
+Set up a directory structure that will demonstrate different permission levels.
+
+# Create main project directory
+sudo mkdir -p /opt/company_project
+
+# Create subdirectories for different access levels
+sudo mkdir -p /opt/company_project/admin_only
+sudo mkdir -p /opt/company_project/development
+sudo mkdir -p /opt/company_project/public_docs
+
+# Create sample files
+sudo touch /opt/company_project/admin_only/system_config.txt
+sudo touch /opt/company_project/development/source_code.py
+sudo touch /opt/company_project/public_docs/readme.txt
+Subtask 2.2: Configure Admin Group Permissions
+Grant admins group full access to all directories and sudo privileges.
+
+# Set ownership and permissions for admin directory
+sudo chown root:admins /opt/company_project/admin_only
+sudo chmod 770 /opt/company_project/admin_only
+sudo chown root:admins /opt/company_project/admin_only/system_config.txt
+sudo chmod 660 /opt/company_project/admin_only/system_config.txt
+
+# Add admins group to sudoers
+echo "%admins ALL=(ALL) ALL" | sudo tee -a /etc/sudoers.d/admins
+Subtask 2.3: Configure Developers Group Permissions
+Grant developers group access to development resources and limited system access.
+
+# Set ownership and permissions for development directory
+sudo chown root:developers /opt/company_project/development
+sudo chmod 775 /opt/company_project/development
+sudo chown root:developers /opt/company_project/development/source_code.py
+sudo chmod 664 /opt/company_project/development/source_code.py
+
+# Create sudoers file for developers with limited privileges
+sudo tee /etc/sudoers.d/developers << 'EOF'
+%developers ALL=(ALL) /bin/systemctl status *, /bin/systemctl restart httpd, /bin/systemctl restart nginx, /usr/bin/tail /var/log/*
+EOF
+Subtask 2.4: Configure Viewers Group Permissions
+Grant viewers group read-only access to public documentation.
+
+# Set ownership and permissions for public docs
+sudo chown root:viewers /opt/company_project/public_docs
+sudo chmod 755 /opt/company_project/public_docs
+sudo chown root:viewers /opt/company_project/public_docs/readme.txt
+sudo chmod 644 /opt/company_project/public_docs/readme.txt
+
+# Viewers get no sudo privileges (no sudoers entry needed)
+Subtask 2.5: Set Up Advanced Permission Controls
+Implement additional security measures using Access Control Lists (ACLs).
+
+# Install ACL tools if not present
+sudo yum install acl -y  # For RHEL/CentOS
+# sudo apt-get install acl -y  # For Ubuntu/Debian
+
+# Set ACLs for fine-grained control
+sudo setfacl -m g:admins:rwx /opt/company_project/admin_only
+sudo setfacl -m g:developers:r-x /opt/company_project/admin_only
+sudo setfacl -m g:viewers:--- /opt/company_project/admin_only
+
+sudo setfacl -m g:admins:rwx /opt/company_project/development
+sudo setfacl -m g:developers:rwx /opt/company_project/development
+sudo setfacl -m g:viewers:r-x /opt/company_project/development
+
+# Verify ACLs
+getfacl /opt/company_project/admin_only
+getfacl /opt/company_project/development
+Subtask 2.6: Create Group-Specific Scripts
+Create scripts that demonstrate different permission levels.
+
+# Create admin script
+sudo tee /opt/company_project/admin_only/admin_script.sh << 'EOF'
+#!/bin/bash
+echo "Admin Script - Full System Access"
+echo "Current user: $(whoami)"
+echo "Groups: $(groups)"
+echo "System uptime: $(uptime)"
+ps aux | head -10
+EOF
+
+sudo chmod 750 /opt/company_project/admin_only/admin_script.sh
+sudo chown root:admins /opt/company_project/admin_only/admin_script.sh
+
+# Create developer script
+sudo tee /opt/company_project/development/dev_script.sh << 'EOF'
+#!/bin/bash
+echo "Developer Script - Development Access"
+echo "Current user: $(whoami)"
+echo "Groups: $(groups)"
+echo "Development environment check:"
+python3 --version 2>/dev/null || echo "Python3 not installed"
+git --version 2>/dev/null || echo "Git not installed"
+EOF
+
+sudo chmod 755 /opt/company_project/development/dev_script.sh
+sudo chown root:developers /opt/company_project/development/dev_script.sh
+
+# Create viewer script
+sudo tee /opt/company_project/public_docs/view_script.sh << 'EOF'
+#!/bin/bash
+echo "Viewer Script - Read-Only Access"
+echo "Current user: $(whoami)"
+echo "Groups: $(groups)"
+echo "Available documentation:"
+ls -la /opt/company_project/public_docs/
+EOF
+
+sudo chmod 755 /opt/company_project/public_docs/view_script.sh
+sudo chown root:viewers /opt/company_project/public_docs/view_script.sh
+Task 3: Test User Access
+Subtask 3.1: Test Admin User Access
+Switch to the admin user and test their permissions.
+
+# Switch to admin user
+su - admin_user
+
+# Test admin directory access
+cd /opt/company_project/admin_only
+ls -la
+cat system_config.txt
+
+# Test script execution
+./admin_script.sh
+
+# Test sudo privileges
+sudo whoami
+
+# Test access to other directories
+ls -la /opt/company_project/development
+ls -la /opt/company_project/public_docs
+
+# Exit admin user session
+exit
+Subtask 3.2: Test Developer User Access
+Switch to the developer user and verify their permissions.
+
+# Switch to developer user
+su - dev_user
+
+# Test development directory access
+cd /opt/company_project/development
+ls -la
+cat source_code.py
+
+# Test script execution
+./dev_script.sh
+
+# Test limited sudo privileges
+sudo systemctl status sshd
+
+# Try to access admin directory (should fail)
+cd /opt/company_project/admin_only
+ls -la /opt/company_project/admin_only
+
+# Test public docs access
+ls -la /opt/company_project/public_docs
+
+# Exit developer user session
+exit
+Subtask 3.3: Test Viewer User Access
+Switch to the viewer user and test their read-only permissions.
+
+# Switch to viewer user
+su - view_user
+
+# Test public docs access
+cd /opt/company_project/public_docs
+ls -la
+cat readme.txt
+
+# Test script execution
+./view_script.sh
+
+# Try to access restricted directories (should fail)
+cd /opt/company_project/admin_only
+cd /opt/company_project/development
+
+# Try to use sudo (should fail)
+sudo whoami
+
+# Exit viewer user session
+exit
+Subtask 3.4: Create Permission Test Script
+Create a comprehensive test script to verify all permissions.
+
+sudo tee /opt/company_project/permission_test.sh << 'EOF'
+#!/bin/bash
+
+echo "=== Permission Testing Script ==="
+echo "Testing access for all user groups"
+echo
+
+# Function to test directory access
+test_directory_access() {
+    local user=$1
+    local directory=$2
+    echo "Testing $user access to $directory:"
+    
+    sudo -u $user test -r "$directory" && echo "  ✓ Read access: YES" || echo "  ✗ Read access: NO"
+    sudo -u $user test -w "$directory" && echo "  ✓ Write access: YES" || echo "  ✗ Write access: NO"
+    sudo -u $user test -x "$directory" && echo "  ✓ Execute access: YES" || echo "  ✗ Execute access: NO"
+    echo
+}
+
+# Test admin user
+echo "=== ADMIN USER TESTS ==="
+test_directory_access "admin_user" "/opt/company_project/admin_only"
+test_directory_access "admin_user" "/opt/company_project/development"
+test_directory_access "admin_user" "/opt/company_project/public_docs"
+
+# Test developer user
+echo "=== DEVELOPER USER TESTS ==="
+test_directory_access "dev_user" "/opt/company_project/admin_only"
+test_directory_access "dev_user" "/opt/company_project/development"
+test_directory_access "dev_user" "/opt/company_project/public_docs"
+
+# Test viewer user
+echo "=== VIEWER USER TESTS ==="
+test_directory_access "view_user" "/opt/company_project/admin_only"
+test_directory_access "view_user" "/opt/company_project/development"
+test_directory_access "view_user" "/opt/company_project/public_docs"
+
+echo "=== Permission Testing Complete ==="
+EOF
+
+sudo chmod +x /opt/company_project/permission_test.sh
+Subtask 3.5: Run Comprehensive Tests
+Execute the permission test script to verify all configurations.
+
+# Run the permission test script
+sudo /opt/company_project/permission_test.sh
+
+# Check group memberships
+echo "=== Group Memberships ==="
+getent group admins
+getent group developers  
+getent group viewers
+
+# Verify sudoers configuration
+echo "=== Sudoers Configuration ==="
+sudo cat /etc/sudoers.d/admins
+sudo cat /etc/sudoers.d/developers
+Troubleshooting Common Issues
+Issue 1: Permission Denied Errors
+If users cannot access directories they should have access to:
+
+# Check file ownership and permissions
+ls -la /opt/company_project/
+ls -la /opt/company_project/*/
+
+# Verify group memberships
+id username
+groups username
+
+# Check ACLs if configured
+getfacl /path/to/directory
+Issue 2: Sudo Access Problems
+If sudo commands are not working:
+
+# Verify sudoers files
+sudo visudo -c
+sudo visudo -c -f /etc/sudoers.d/admins
+sudo visudo -c -f /etc/sudoers.d/developers
+
+# Check sudoers file syntax
+sudo cat /etc/sudoers.d/admins
+Issue 3: Group Assignment Issues
+If users are not properly assigned to groups:
+
+# Re-add user to group
+sudo usermod -a -G groupname username
+
+# Force group refresh (user may need to log out/in)
+newgrp groupname
+Security Best Practices Implemented
+Principle of Least Privilege
+Admins: Full system access only when necessary
+Developers: Limited to development tools and specific services
+Viewers: Read-only access to public documentation
+Defense in Depth
+Multiple permission layers (file permissions, ACLs, sudoers)
+Group-based access control
+Directory-level restrictions
+Audit Trail
+All sudo commands are logged
+File access can be monitored
+Group membership changes are tracked
+Verification Commands
+Use these commands to verify your lab completion:
+
+# Verify all groups exist
+getent group | grep -E "(admins|developers|viewers)"
+
+# Verify all users exist and are in correct groups
+for user in admin_user dev_user view_user; do
+    echo "User: $user"
+    groups $user
+    echo
+done
+
+# Verify directory structure and permissions
+find /opt/company_project -type d -exec ls -ld {} \;
+find /opt/company_project -type f -exec ls -l {} \;
+
+# Test permission script
+sudo /opt/company_project/permission_test.sh
+Conclusion
+In this advanced lab, you have successfully:
+
+Created three distinct user groups (admins, developers, viewers) with different privilege levels
+Implemented role-based access control using Linux groups and permissions
+Configured granular permissions using traditional Unix permissions and Access Control Lists (ACLs)
+Set up sudo privileges with appropriate restrictions for each group
+Created and tested a comprehensive permission system that follows security best practices
+Verified access controls through systematic testing of each user group
+This lab demonstrates enterprise-level security practices that are essential for:
+
+System Administration: Managing user access in multi-user environments
+DevOps Security: Implementing least-privilege access for development teams
+Compliance Requirements: Meeting security standards for access control
+Incident Prevention: Reducing security risks through proper permission management
+The skills learned in this lab are directly applicable to Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform certification and real-world system administration scenarios. Understanding group-based permissions is fundamental to maintaining secure, well-organized Linux environments in enterprise settings.
+
+Key Takeaways:
+
+Groups provide an efficient way to manage permissions for multiple users
+The principle of least privilege should guide all permission assignments
+Regular testing and verification of permissions is essential for security
+Proper documentation and clear role definitions prevent security gaps
+ACLs provide additional flexibility beyond traditional Unix permissions
