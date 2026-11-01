@@ -1,0 +1,469 @@
+Lab 17: Work with the Automation Controller API
+Objectives
+By the end of this lab, you will be able to:
+
+Explain the fundamentals of the Automation Controller REST API and its authentication model
+Use the API via curl to launch and monitor a job template execution
+Write a Python API client that launches jobs, checks job status, and lists job templates
+Generate a simple job execution summary report from API data
+Apply basic API security practices (token handling, SSL verification) and troubleshoot common API errors
+Prerequisites
+Before starting this lab, you should have:
+
+Basic understanding of Ansible and Ansible Automation Platform concepts (job templates, inventories, organizations)
+Familiarity with REST API concepts and HTTP methods (GET, POST)
+Basic Python programming knowledge
+Understanding of JSON data format
+Access to an Automation Controller instance (or Ansible Automation Platform trial/demo instance) with at least one existing job template (for example, the built-in "Demo Job Template")
+This lab assumes you are working in an isolated, self-owned or sanctioned practice environment (such as an Al Nafi ready-to-use cloud machine) with Automation Controller already installed. All API calls in this lab are read-only or act only on test resources you create yourself.
+
+Install the required Python library before starting Task 2:
+
+pip3 install --user requests
+Verify the tools you will use are available:
+
+curl --version
+jq --version
+python3 --version
+Lab Environment
+Your lab environment includes:
+
+Ansible Automation Platform with Automation Controller reachable at a hostname or IP you control
+Python 3.x with the requests library installed
+curl and jq utilities
+A text editor (vim or nano)
+Throughout this lab, replace your-controller-hostname with your actual controller hostname or IP address.
+
+Task 1: Launch and Monitor a Job Using the API with curl
+Subtask 1.1: Set Up API Authentication
+Create a working directory for the lab:
+
+mkdir -p ~/api-lab
+cd ~/api-lab
+Create an API token through the Automation Controller web interface:
+
+Log into Automation Controller
+Navigate to Users -> your username -> Tokens
+Click Add, leave scope as Write, and click Save
+Copy the token value shown (it is displayed only once)
+Store your connection details as environment variables in a credentials file:
+
+cat > ~/.api_credentials << 'EOF'
+export CONTROLLER_HOST="your-controller-hostname"
+export CONTROLLER_TOKEN="your-api-token-here"
+EOF
+
+chmod 600 ~/.api_credentials
+source ~/.api_credentials
+Note on SSL verification: the examples in this lab use the curl -k flag and the Python verify=False option because a typical lab Automation Controller instance uses a self-signed certificate. The -k flag disables SSL certificate verification, which is acceptable for an isolated practice environment but is not safe for production. In a production environment, use a proper CA-signed certificate and verify against it instead of disabling verification, for example:
+
+curl --cacert /path/to/cert.pem \
+     -H "Authorization: Bearer $CONTROLLER_TOKEN" \
+     https://$CONTROLLER_HOST/api/v2/job_templates/
+Deliverable for this subtask: a working ~/.api_credentials file (permissions 600) and confirmation that echo $CONTROLLER_HOST and echo $CONTROLLER_TOKEN print your values after sourcing the file.
+
+Subtask 1.2: Explore the API and List Job Templates
+Confirm you can reach the API root:
+
+curl -k -s -H "Authorization: Bearer $CONTROLLER_TOKEN" \
+     https://$CONTROLLER_HOST/api/v2/ping/ | jq '.'
+Expected output: a JSON object containing an "active_node" field and a "version" field, confirming the controller is reachable and your token is valid.
+
+List available job templates:
+
+curl -k -s -H "Authorization: Bearer $CONTROLLER_TOKEN" \
+     https://$CONTROLLER_HOST/api/v2/job_templates/ | jq '.results[] | {id, name}'
+Expected output: a list of JSON objects, each showing an id and name, for example {"id": 7, "name": "Demo Job Template"}. Note the id of the template you will launch next (the built-in "Demo Job Template" is used in the rest of this lab).
+
+Deliverable for this subtask: the JSON output listing at least one job template's id and name.
+
+Subtask 1.3: Launch a Job Using curl
+Look up the job template ID by name and store it in a variable:
+
+JOB_TEMPLATE_ID=$(curl -k -s -H "Authorization: Bearer $CONTROLLER_TOKEN" \
+                  https://$CONTROLLER_HOST/api/v2/job_templates/ | \
+                  jq -r '.results[] | select(.name=="Demo Job Template") | .id')
+
+echo "Job Template ID: $JOB_TEMPLATE_ID"
+If this prints nothing, list the templates again and substitute the exact name of a template that exists in your environment.
+
+Launch the job template:
+
+JOB_RESPONSE=$(curl -k -s -X POST \
+               -H "Authorization: Bearer $CONTROLLER_TOKEN" \
+               -H "Content-Type: application/json" \
+               https://$CONTROLLER_HOST/api/v2/job_templates/$JOB_TEMPLATE_ID/launch/)
+
+echo "$JOB_RESPONSE" | jq '.'
+
+JOB_ID=$(echo "$JOB_RESPONSE" | jq -r '.job')
+echo "Launched Job ID: $JOB_ID"
+Note that the launch/ endpoint response contains a "job" field with the numeric job ID (not "id" at the top level in most Controller versions), which is why the script extracts .job.
+
+Deliverable for this subtask: a non-empty $JOB_ID value printed to the terminal, corresponding to a new entry visible under Jobs in the Automation Controller web interface.
+
+Subtask 1.4: Monitor Job Execution
+Create a monitoring script:
+
+cat > monitor_job.sh << 'EOF'
+#!/bin/bash
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 <job_id>"
+    exit 1
+fi
+
+JOB_ID=$1
+source ~/.api_credentials
+
+echo "Monitoring job $JOB_ID..."
+
+while true; do
+    STATUS=$(curl -k -s -H "Authorization: Bearer $CONTROLLER_TOKEN" \
+             https://$CONTROLLER_HOST/api/v2/jobs/$JOB_ID/ | \
+             jq -r '.status')
+
+    echo "$(date '+%H:%M:%S'): Job status is $STATUS"
+
+    if [[ "$STATUS" == "successful" || "$STATUS" == "failed" || "$STATUS" == "error" || "$STATUS" == "canceled" ]]; then
+        echo "Job completed with status: $STATUS"
+        break
+    fi
+
+    sleep 5
+done
+
+echo "Final job summary:"
+curl -k -s -H "Authorization: Bearer $CONTROLLER_TOKEN" \
+     https://$CONTROLLER_HOST/api/v2/jobs/$JOB_ID/ | \
+     jq '{id, name, status, started, finished, elapsed}'
+EOF
+
+chmod +x monitor_job.sh
+Run the script against the job you launched:
+
+./monitor_job.sh $JOB_ID
+Expected output: repeated status lines (for example pending, waiting, running) followed by Job completed with status: successful, and a final JSON object with id, name, status, started, finished, and elapsed fields.
+
+Deliverable for this subtask: terminal output showing the job transition to a terminal status (successful, failed, error, or canceled) and the final JSON summary.
+
+Task 2: Build a Python API Client
+Subtask 2.1: Create the API Client Class
+Create the client script:
+
+cat > controller_client.py << 'EOF'
+#!/usr/bin/env python3
+"""
+Simple Automation Controller API client for lab use.
+Uses token authentication and disables SSL verification for
+self-signed lab certificates (verify=False). Do not disable
+SSL verification in production.
+"""
+
+import json
+import os
+import sys
+import time
+
+import requests
+from urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+
+class ControllerClient:
+    def __init__(self, host, token):
+        self.host = host
+        self.token = token
+        self.base_url = f"https://{host}/api/v2"
+        self.headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+
+    def _get(self, endpoint, params=None):
+        url = f"{self.base_url}{endpoint}"
+        try:
+            return requests.get(
+                url, headers=self.headers, params=params, verify=False, timeout=30
+            )
+        except requests.exceptions.RequestException as exc:
+            print(f"Request failed: {exc}")
+            return None
+
+    def _post(self, endpoint, data=None):
+        url = f"{self.base_url}{endpoint}"
+        try:
+            return requests.post(
+                url,
+                headers=self.headers,
+                data=json.dumps(data or {}),
+                verify=False,
+                timeout=30,
+            )
+        except requests.exceptions.RequestException as exc:
+            print(f"Request failed: {exc}")
+            return None
+
+    def list_job_templates(self):
+        """Return a list of job template dicts with id and name."""
+        response = self._get("/job_templates/")
+        if response and response.status_code == 200:
+            return response.json()["results"]
+        print(f"Failed to list job templates: {response.status_code if response else 'no response'}")
+        return []
+
+    def find_job_template_id(self, name):
+        """Look up a job template ID by exact name match."""
+        for template in self.list_job_templates():
+            if template["name"] == name:
+                return template["id"]
+        return None
+
+    def launch_job_template(self, template_id, extra_vars=None, limit=None):
+        """Launch a job template and return the job ID, or None on failure."""
+        launch_data = {}
+        if extra_vars:
+            launch_data["extra_vars"] = extra_vars
+        if limit:
+            launch_data["limit"] = limit
+
+        response = self._post(f"/job_templates/{template_id}/launch/", data=launch_data)
+
+        if response and response.status_code == 201:
+            job_data = response.json()
+            job_id = job_data.get("job", job_data.get("id"))
+            print(f"Job launched successfully. Job ID: {job_id}")
+            return job_id
+
+        print(f"Failed to launch job: {response.status_code if response else 'no response'}")
+        if response is not None:
+            print(response.text)
+        return None
+
+    def get_job(self, job_id):
+        """Return the job detail dict for a given job ID."""
+        response = self._get(f"/jobs/{job_id}/")
+        if response and response.status_code == 200:
+            return response.json()
+        print(f"Failed to get job {job_id}: {response.status_code if response else 'no response'}")
+        return None
+
+    def monitor_job(self, job_id, poll_interval=5):
+        """Poll a job until it reaches a terminal status, then return its detail dict."""
+        terminal_states = {"successful", "failed", "error", "canceled"}
+        print(f"Monitoring job {job_id}...")
+
+        while True:
+            job = self.get_job(job_id)
+            if job is None:
+                return None
+
+            status = job["status"]
+            print(f"Job {job_id} status: {status}")
+
+            if status in terminal_states:
+                return job
+
+            time.sleep(poll_interval)
+
+    def list_recent_jobs(self, page_size=20):
+        """Return the most recent jobs, ordered by most recently created first."""
+        response = self._get("/jobs/", params={"order_by": "-created", "page_size": page_size})
+        if response and response.status_code == 200:
+            return response.json()["results"]
+        print(f"Failed to list jobs: {response.status_code if response else 'no response'}")
+        return []
+
+
+def main():
+    host = os.getenv("CONTROLLER_HOST")
+    token = os.getenv("CONTROLLER_TOKEN")
+
+    if not host or not token:
+        print("Please set CONTROLLER_HOST and CONTROLLER_TOKEN environment variables")
+        sys.exit(1)
+
+    client = ControllerClient(host, token)
+
+    print("Available job templates:")
+    for template in client.list_job_templates():
+        print(f"  ID: {template['id']}  Name: {template['name']}")
+
+if __name__ == "__main__":
+    main()
+EOF
+
+chmod +x controller_client.py
+Run the client to confirm it lists your templates:
+
+source ~/.api_credentials
+python3 controller_client.py
+Expected output: a line Available job templates: followed by one line per template showing its ID and Name, matching what you saw with curl in Task 1.
+
+Deliverable for this subtask: successful script execution listing at least one job template with no traceback errors.
+
+Subtask 2.2: Launch and Monitor a Job Programmatically
+Create a small driver script that uses ControllerClient to launch and monitor a job:
+
+cat > run_job.py << 'EOF'
+#!/usr/bin/env python3
+import os
+import sys
+
+from controller_client import ControllerClient
+
+
+def main():
+    host = os.getenv("CONTROLLER_HOST")
+    token = os.getenv("CONTROLLER_TOKEN")
+    template_name = sys.argv[1] if len(sys.argv) > 1 else "Demo Job Template"
+
+    if not host or not token:
+        print("Please set CONTROLLER_HOST and CONTROLLER_TOKEN environment variables")
+        sys.exit(1)
+
+    client = ControllerClient(host, token)
+
+    template_id = client.find_job_template_id(template_name)
+    if template_id is None:
+        print(f"Job template '{template_name}' not found")
+        sys.exit(1)
+
+    job_id = client.launch_job_template(template_id)
+    if job_id is None:
+        sys.exit(1)
+
+    final_job = client.monitor_job(job_id)
+    if final_job:
+        print("\nFinal job details:")
+        print(f"  ID: {final_job['id']}")
+        print(f"  Name: {final_job['name']}")
+        print(f"  Status: {final_job['status']}")
+        print(f"  Started: {final_job.get('started')}")
+        print(f"  Finished: {final_job.get('finished')}")
+        print(f"  Elapsed: {final_job.get('elapsed')} seconds")
+
+
+if __name__ == "__main__":
+    main()
+EOF
+
+chmod +x run_job.py
+Run it against your demo template:
+
+python3 run_job.py "Demo Job Template"
+Expected output: Job launched successfully. Job ID: <n>, followed by repeated status lines, and a final job details block showing Status: successful (or failed/error if the underlying playbook itself fails, which still confirms the API workflow works correctly).
+
+Deliverable for this subtask: a completed run showing the final job details block with a terminal status.
+
+Task 3: Generate a Job Execution Summary Report
+Subtask 3.1: Fetch Recent Job Data
+Create a report generator script that reuses ControllerClient:
+
+cat > generate_report.py << 'EOF'
+#!/usr/bin/env python3
+import os
+import sys
+from collections import Counter
+from datetime import datetime
+
+from controller_client import ControllerClient
+
+
+class ReportGenerator:
+    def __init__(self, client):
+        self.client = client
+
+    def generate_job_summary_report(self, page_size=20):
+        """Print a summary report for the most recent jobs."""
+        jobs = self.client.list_recent_jobs(page_size=page_size)
+
+        if not jobs:
+            print("No jobs found. Launch at least one job before running this report.")
+            return
+
+        total_jobs = len(jobs)
+        status_counts = Counter(job["status"] for job in jobs)
+        successful_jobs = status_counts.get("successful", 0)
+        failed_jobs = status_counts.get("failed", 0) + status_counts.get("error", 0)
+
+        success_rate = (successful_jobs / total_jobs * 100) if total_jobs else 0
+
+        template_usage = Counter(
+            job.get("name", "Unknown") for job in jobs
+        )
+
+        print("=" * 60)
+        print(f"JOB EXECUTION REPORT - most recent {total_jobs} jobs")
+        print("=" * 60)
+        print(f"Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print()
+        print("SUMMARY:")
+        print(f"  Total Jobs:      {total_jobs}")
+        print(f"  Successful:      {successful_jobs}")
+        print(f"  Failed/Error:    {failed_jobs}")
+        print(f"  Success Rate:    {success_rate:.1f}%")
+        print()
+        print("STATUS BREAKDOWN:")
+        for status, count in status_counts.most_common():
+            print(f"  {status:<12} {count}")
+        print()
+        print("JOB NAME FREQUENCY:")
+        for name, count in template_usage.most_common():
+            print(f"  {name:<30} {count} run(s)")
+        print()
+        print("RECENT JOB DETAILS:")
+        for job in jobs[:10]:
+            print(
+                f"  Job {job['id']:<6} | {job['status']:<12} | "
+                f"{job.get('name', 'Unknown'):<25} | "
+                f"finished: {job.get('finished') or 'N/A'}"
+            )
+        print("=" * 60)
+
+
+def main():
+    host = os.getenv("CONTROLLER_HOST")
+    token = os.getenv("CONTROLLER_TOKEN")
+
+    if not host or not token:
+        print("Please set CONTROLLER_HOST and CONTROLLER_TOKEN environment variables")
+        sys.exit(1)
+
+    client = ControllerClient(host, token)
+    reporter = ReportGenerator(client)
+    reporter.generate_job_summary_report()
+
+
+if __name__ == "__main__":
+    main()
+EOF
+
+chmod +x generate_report.py
+Run the report after you have launched at least one or two jobs from Task 1 and Task 2:
+
+python3 generate_report.py
+Expected output: a formatted report showing Total Jobs, Successful, Failed/Error, Success Rate, a status breakdown table, job name frequency, and a list of recent job IDs with their status and finish time.
+
+Deliverable for this subtask: printed report output with a Success Rate of 100.0% (assuming your demo jobs completed successfully) and at least one row under RECENT JOB DETAILS.
+
+Subtask 3.2: Validate the Report Against the Web UI
+In the Automation Controller web interface, navigate to Jobs and locate the same job IDs printed in your report.
+Confirm the status and finish time shown in the UI matches the values in your script's output.
+Deliverable for this subtask: a short written note (2-3 sentences, saved in ~/api-lab/validation_notes.txt) confirming the job IDs, statuses, and finish times match between the API report and the web UI. Create it with:
+
+cat > validation_notes.txt << 'EOF'
+Validated job report output against the Automation Controller web UI.
+Job IDs, statuses, and finish timestamps in generate_report.py output
+matched the values shown under Jobs in the web interface.
+EOF
+Expected Outcomes
+A working set of scripts (monitor_job.sh, controller_client.py, run_job.py, generate_report.py) that authenticate to Automation Controller, launch jobs, and monitor them to completion
+At least one successfully launched and monitored job visible both in your terminal output and the Automation Controller web UI
+A generated job summary report showing accurate counts and success rate that you have manually validated against the web UI
+Troubleshooting
+401 Unauthorized or 403 Forbidden responses: check that CONTROLLER_TOKEN is set correctly (echo $CONTROLLER_TOKEN) and that the token has not expired or been revoked under Users -> Tokens in the web UI.
+curl or Python requests hang or time out: verify CONTROLLER_HOST is reachable with curl -k -I https://$CONTROLLER_HOST/api/v2/ping/ and check that no firewall or proxy is blocking port 443.
+Conclusion
+In this lab you worked directly with the Automation Controller REST API using both curl and Python, covering the core operations of launching job templates, polling job status until completion, and listing recent job history. You built a reusable ControllerClient class that centralizes authentication and error handling, then used it to drive a job from launch to a validated summary report, cross-checking the API output against the Automation Controller web UI. Along the way you practiced secure token handling by storing credentials in a permission-restricted file and learned why disabling SSL verification with -k or verify=False is acceptable only in an isolated lab setting, never in production. For production use, replace token-in-file storage with a secrets manager or vault integration, enable proper CA-signed certificate verification, and consult the official Ansible Automation Platform Controller API Guide and the browsable API at /api/v2/ on your own controller for the complete set of endpoints beyond those covered here.
