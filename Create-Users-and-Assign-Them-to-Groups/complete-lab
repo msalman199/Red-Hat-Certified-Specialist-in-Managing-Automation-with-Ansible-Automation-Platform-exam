@@ -1,0 +1,330 @@
+Lab 9: Create Users and Assign Them to Groups
+Objectives
+By the end of this lab, you will be able to:
+
+• Create multiple users in Ansible Automation Platform • Assign users to different groups based on their organizational roles • Configure appropriate permissions for user groups • Test user access to resources and validate security controls • Understand the relationship between users, groups, and role-based access control (RBAC) • Implement best practices for user management in automation environments
+
+Prerequisites
+Before starting this lab, you should have:
+
+• Basic understanding of Linux user management concepts • Familiarity with Ansible Automation Platform components (Controller and Hub) • Knowledge of role-based access control (RBAC) principles • Understanding of organizational roles and responsibilities • Basic web browser navigation skills • Completed previous labs covering Ansible Automation Platform installation and basic configuration
+
+Lab Environment
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines with Ansible Automation Platform already installed. Simply click Start Lab to access your environment - no need to build your own VM or install software.
+
+Your lab environment includes: • Ansible Automation Controller (AWX) accessible via web interface • Ansible Automation Hub for content management • Pre-configured network connectivity • Administrative access to create and manage users
+
+Task 1: Create Multiple Users
+Subtask 1.1: Access the Automation Controller
+Open your web browser and navigate to the Automation Controller URL provided in your lab environment
+
+Log in using the administrator credentials:
+
+Username: admin
+Password: [provided in lab environment]
+Verify successful login by confirming you can see the main dashboard with navigation menu on the left side
+
+Subtask 1.2: Navigate to User Management
+Click on "Access" in the left navigation menu
+
+Select "Users" from the dropdown menu
+
+Review the current user list - you should see the admin user and possibly other default users
+
+Subtask 1.3: Create Development Team Users
+Click the "Add" button (+ icon) to create a new user
+
+Create the first developer user with the following details:
+
+Username: dev_alice
+Email: alice@company.com
+First Name: Alice
+Last Name: Developer
+Password: DevPass123!
+Confirm Password: DevPass123!
+User Type: Normal User
+Click "Save" to create the user
+
+Repeat the process to create a second developer:
+
+Username: dev_bob
+Email: bob@company.com
+First Name: Bob
+Last Name: Developer
+Password: DevPass123!
+Confirm Password: DevPass123!
+User Type: Normal User
+Subtask 1.4: Create Operations Team Users
+Create the first operations user:
+
+Username: ops_charlie
+Email: charlie@company.com
+First Name: Charlie
+Last Name: Operations
+Password: OpsPass123!
+Confirm Password: OpsPass123!
+User Type: Normal User
+Create the second operations user:
+
+Username: ops_diana
+Email: diana@company.com
+First Name: Diana
+Last Name: Operations
+Password: OpsPass123!
+Confirm Password: OpsPass123!
+User Type: Normal User
+Subtask 1.5: Create Management User
+Create a management user:
+
+Username: mgr_edward
+Email: edward@company.com
+First Name: Edward
+Last Name: Manager
+Password: MgrPass123!
+Confirm Password: MgrPass123!
+User Type: Normal User
+Verify all users are created by reviewing the Users list - you should now see 5 new users plus the admin user
+
+Task 2: Assign Users to Different Groups Based on Their Roles
+Subtask 2.1: Create User Groups
+Navigate to Groups by clicking "Access" → "Teams" in the left menu
+
+Create the Development Team:
+
+Click the "Add" button
+Enter the following details:
+Name: Development Team
+Description: Developers responsible for creating and testing automation content
+Organization: Default (or your organization name)
+Click "Save"
+Create the Operations Team:
+
+Name: Operations Team
+Description: Operations staff responsible for running and monitoring automation
+Organization: Default
+Create the Management Team:
+
+Name: Management Team
+Description: Managers with oversight responsibilities for automation projects
+Organization: Default
+Subtask 2.2: Add Users to Development Team
+Click on "Development Team" from the Teams list
+
+Navigate to the "Users" tab within the team details
+
+Click "Add" to add users to this team
+
+Select the development users:
+
+Check the boxes for dev_alice and dev_bob
+Click "Save"
+Verify the users are added by confirming they appear in the Users tab of the Development Team
+
+Subtask 2.3: Add Users to Operations Team
+Return to the Teams list and click on "Operations Team"
+
+Go to the "Users" tab
+
+Click "Add" and select:
+
+ops_charlie
+ops_diana
+Click "Save" to add the users to the Operations Team
+
+Subtask 2.4: Add User to Management Team
+Navigate to "Management Team"
+
+Go to the "Users" tab
+
+Add the management user:
+
+Select mgr_edward
+Click "Save"
+Subtask 2.5: Configure Team Permissions
+Configure Development Team Permissions:
+
+Click on "Development Team"
+Go to the "Permissions" tab
+Click "Add" to add permissions
+Select appropriate permissions for developers:
+Resource Type: Job Template
+Permission: Execute
+Add additional permission:
+Resource Type: Project
+Permission: Read
+Configure Operations Team Permissions:
+
+Navigate to "Operations Team"
+Go to "Permissions" tab
+Add permissions:
+Resource Type: Job Template
+Permission: Execute
+Resource Type: Inventory
+Permission: Use
+Configure Management Team Permissions:
+
+Navigate to "Management Team"
+Add broader permissions:
+Resource Type: Job Template
+Permission: Read
+Resource Type: Job
+Permission: Read
+Task 3: Test User Access to Resources
+Subtask 3.1: Create Test Resources
+Create a Test Project (if not already available):
+
+Navigate to "Resources" → "Projects"
+Click "Add"
+Configure:
+Name: Test Project
+Description: Project for testing user access
+Organization: Default
+SCM Type: Git
+SCM URL: https://github.com/ansible/ansible-examples.git
+Click "Save"
+Create a Test Inventory:
+
+Navigate to "Resources" → "Inventories"
+Click "Add" → "Add inventory"
+Configure:
+Name: Test Inventory
+Description: Inventory for testing user access
+Organization: Default
+Click "Save"
+Add a host to the inventory:
+
+Click on "Test Inventory"
+Go to "Hosts" tab
+Click "Add"
+Configure:
+Host Name: localhost
+Description: Local test host
+Click "Save"
+Subtask 3.2: Create a Test Job Template
+Navigate to "Resources" → "Templates"
+
+Click "Add" → "Add job template"
+
+Configure the job template:
+
+Name: Test Job Template
+Description: Simple job template for testing user access
+Job Type: Run
+Inventory: Test Inventory
+Project: Test Project
+Playbook: lamp_simple/site.yml
+Credentials: [Select appropriate credential or create a demo credential]
+Click "Save"
+
+Subtask 3.3: Test Development User Access
+Log out from the admin account by clicking the user icon in the top right and selecting "Logout"
+
+Log in as a development user:
+
+Username: dev_alice
+Password: DevPass123!
+Test access to resources:
+
+Navigate to "Resources" → "Templates"
+Verify you can see the "Test Job Template"
+Try to launch the job template by clicking the rocket icon
+Note the results - you should be able to execute the job
+Test project access:
+
+Navigate to "Resources" → "Projects"
+Verify you can view the "Test Project"
+Try to edit the project - you should have limited access
+Subtask 3.4: Test Operations User Access
+Log out and log in as an operations user:
+
+Username: ops_charlie
+Password: OpsPass123!
+Test inventory access:
+
+Navigate to "Resources" → "Inventories"
+Verify you can see and use the "Test Inventory"
+Test job execution:
+
+Navigate to "Resources" → "Templates"
+Try to launch the "Test Job Template"
+Verify the job runs successfully
+Check job history:
+
+Navigate to "Views" → "Jobs"
+Verify you can see jobs that have been executed
+Subtask 3.5: Test Management User Access
+Log out and log in as the management user:
+
+Username: mgr_edward
+Password: MgrPass123!
+Test read access to resources:
+
+Navigate through different sections (Templates, Projects, Inventories)
+Verify you can view resources but have limited modification capabilities
+Test job monitoring:
+
+Navigate to "Views" → "Jobs"
+Verify you can view job history and status
+Try to view job details and logs
+Subtask 3.6: Test Access Restrictions
+Log in as dev_alice again
+
+Try to access administrative functions:
+
+Look for "Access" menu - it should not be visible or accessible
+Try to navigate directly to user management - access should be denied
+Test resource creation limitations:
+
+Try to create new projects or inventories
+Verify that permissions are properly restricted
+Document your findings by noting what each user type can and cannot access
+
+Troubleshooting Tips
+Common Issues and Solutions
+Issue: Users cannot log in after creation
+
+Solution: Verify password complexity requirements are met
+Check that the user account is active (not disabled)
+Ensure correct username and password are being used
+Issue: Users don't see expected resources
+
+Solution: Verify team membership is correctly configured
+Check that permissions are properly assigned to teams
+Ensure resources are associated with the correct organization
+Issue: Permission denied errors
+
+Solution: Review team permissions and ensure appropriate access levels
+Check that users are members of the correct teams
+Verify resource-level permissions are configured
+Issue: Teams not showing expected permissions
+
+Solution: Refresh the browser page
+Log out and log back in to refresh user session
+Check that permissions were saved correctly
+Verification Commands
+To verify user creation from the command line (if SSH access is available):
+
+# Check if users exist in the system
+sudo -u awx awx-manage list_users
+
+# Verify team memberships
+sudo -u awx awx-manage list_teams
+Best Practices Implemented
+Throughout this lab, we've implemented several security and management best practices:
+
+• Principle of Least Privilege: Users are granted only the minimum permissions necessary for their roles • Role-Based Access Control: Permissions are assigned to teams rather than individual users • Clear Naming Conventions: Usernames and team names clearly indicate their purpose • Strong Password Requirements: All accounts use complex passwords • Separation of Duties: Different teams have different levels of access to resources
+
+Conclusion
+In this lab, you have successfully:
+
+• Created multiple users representing different organizational roles (developers, operations staff, and managers) • Organized users into teams based on their job functions and responsibilities • Configured appropriate permissions for each team to ensure proper access control • Tested user access to verify that security controls work as expected • Implemented role-based access control following industry best practices
+
+Why This Matters: Proper user and group management is critical for maintaining security and operational efficiency in automation environments. By organizing users into teams with appropriate permissions, you ensure that:
+
+Security is maintained through controlled access to sensitive automation resources
+Operational efficiency is improved by giving users access to the tools they need
+Compliance requirements are met through proper access controls and audit trails
+Scalability is achieved by managing permissions at the team level rather than individual users
+This foundation in user and group management will be essential as you prepare for the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform exam and in real-world automation deployments where proper access control is crucial for both security and operational success.
+
+The skills you've developed in this lab directly apply to enterprise environments where multiple teams collaborate on automation projects while maintaining appropriate security boundaries and access controls.
