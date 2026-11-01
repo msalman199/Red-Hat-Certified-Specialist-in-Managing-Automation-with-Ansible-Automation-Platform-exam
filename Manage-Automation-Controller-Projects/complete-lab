@@ -1,0 +1,205 @@
+Lab 14: Manage Automation Controller Projects
+Objectives
+By the end of this lab, you will be able to:
+
+Create and configure new projects in Ansible Automation Controller
+Link projects to Git repositories for source control integration
+Create and configure job templates for running Ansible playbooks
+Understand the relationship between projects, inventories, and job templates
+Execute automated tasks using the Automation Controller web interface
+Prerequisites
+Before starting this lab, you should have:
+
+Basic understanding of Ansible concepts (playbooks, roles, inventories)
+Familiarity with Git version control system
+Knowledge of YAML syntax
+Understanding of Linux command line operations
+Access to a web browser for the Automation Controller interface
+Lab Environment
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines with Ansible Automation Controller already installed. Simply click Start Lab to begin - no need to build your own virtual machine or install software.
+
+Your lab environment includes:
+
+Ansible Automation Controller (AWX) web interface
+Pre-configured managed nodes
+Git repository access
+Sample playbooks and configurations
+Task 1: Create a New Project in the Controller
+A project in Automation Controller is a logical collection of Ansible playbooks and related files. Projects serve as the foundation for organizing your automation content.
+
+Subtask 1.1: Access the Automation Controller Interface
+Open your web browser and navigate to the Automation Controller URL provided in your lab environment
+
+Log in using the credentials provided:
+
+Username: admin
+Password: password (or as specified in your lab environment)
+Once logged in, you should see the Automation Controller dashboard
+
+Subtask 1.2: Navigate to Projects Section
+In the left navigation menu, click on Projects
+You will see a list of existing projects (if any)
+Click the Add button (+ icon) to create a new project
+Subtask 1.3: Configure Basic Project Settings
+Fill in the following basic information:
+
+Name: Web Server Configuration Project
+Description: Project for managing web server configurations and deployments
+Organization: Select Default (or your assigned organization)
+Leave other fields at their default values for now
+
+Do not click Save yet - we will configure the source control settings first
+
+Task 2: Link the Project to a Git Repository
+Linking your project to a Git repository enables version control and collaborative development of your Ansible content.
+
+Subtask 2.1: Configure Source Control Type
+In the project configuration form, locate the Source Control Type dropdown
+Select Git from the available options
+Additional fields will appear for Git configuration
+Subtask 2.2: Set Up Git Repository Connection
+Configure the following Git settings:
+
+Source Control URL: https://github.com/ansible/ansible-examples.git
+Source Control Branch/Tag/Commit: master
+Source Control Credential: Leave blank (public repository)
+Under Source Control Update Options, check the following boxes:
+
+Clean: Removes any local modifications to the repository
+Delete on Update: Deletes the local repository and re-clones it
+Update Revision on Launch: Updates the repository before each job run
+Subtask 2.3: Save and Sync the Project
+Click Save to create the project
+The project will be created and automatically attempt to sync with the Git repository
+You should see a sync status indicator showing the progress
+Wait for the sync to complete successfully (green checkmark icon)
+Subtask 2.4: Verify Project Content
+Once synced, click on the project name to view its details
+Navigate to the Jobs tab to see any sync jobs that have run
+The project should now contain the playbooks from the Git repository
+Task 3: Create a Job Template for Running Playbooks
+A job template defines how a playbook should be executed, including which inventory to use, what credentials to apply, and various execution parameters.
+
+Subtask 3.1: Navigate to Job Templates
+In the left navigation menu, click on Templates
+Click the Add dropdown and select Add job template
+Subtask 3.2: Configure Basic Job Template Settings
+Fill in the following information:
+Name: Deploy Apache Web Server
+Description: Template for deploying and configuring Apache web server
+Job Type: Run (default)
+Inventory: Select Demo Inventory (or create a new one if needed)
+Project: Select Web Server Configuration Project (the project we just created)
+Subtask 3.3: Select Playbook and Configure Execution
+Playbook: From the dropdown, select lamp_simple/site.yml
+
+This playbook installs and configures a LAMP stack
+Credentials:
+
+Click the search icon next to Credentials
+Select Demo Credential or create a new machine credential if needed
+Options: Check the following boxes:
+
+Enable Privilege Escalation: Allows the playbook to use sudo
+Enable Provisioning Callbacks: Allows nodes to request job execution
+Subtask 3.4: Configure Advanced Settings
+Verbosity: Select 1 (Verbose) to see detailed output during execution
+
+Job Slicing: Leave at 1 (no slicing needed for this lab)
+
+Timeout: Set to 0 (no timeout limit)
+
+Show Changes: Check this box to display what changes the playbook would make
+
+Subtask 3.5: Save and Test the Job Template
+Click Save to create the job template
+
+Once saved, click the Launch button (rocket icon) to test the template
+
+The job will start executing and you can monitor its progress in real-time
+
+Review the job output to ensure it completes successfully
+
+Task 4: Verify and Manage Your Automation Setup
+Subtask 4.1: Review Project Synchronization
+Navigate back to Projects
+Click on your Web Server Configuration Project
+Click the Sync button to manually update from Git
+Monitor the sync job to ensure it completes successfully
+Subtask 4.2: Create Additional Job Templates
+Create a second job template with these settings:
+Name: Database Configuration
+Description: Template for database server setup
+Project: Web Server Configuration Project
+Playbook: Select another playbook from the repository
+Inventory: Use the same inventory as before
+Subtask 4.3: Organize Templates with Labels
+Edit your job templates to add labels for better organization:
+
+Click on a job template to edit it
+In the Labels field, add relevant tags like web-server, production, lamp-stack
+Save the changes
+Use labels to filter and search for templates in the Templates list
+
+Subtask 4.4: Set Up Scheduled Jobs (Optional)
+Edit your Deploy Apache Web Server template
+Click on the Schedules tab
+Click Add to create a new schedule
+Configure a schedule to run the job automatically:
+Name: Weekly Web Server Update
+Start Date/Time: Set to a future date
+Repeat Frequency: Weekly
+Time Zone: Select your local time zone
+Troubleshooting Common Issues
+Project Sync Failures
+If your project fails to sync with Git:
+
+Check Repository URL: Ensure the Git URL is correct and accessible
+Verify Credentials: For private repositories, ensure proper credentials are configured
+Network Connectivity: Verify the Automation Controller can reach the Git server
+Branch/Tag Issues: Ensure the specified branch or tag exists in the repository
+Job Template Execution Errors
+If job templates fail to execute:
+
+Inventory Issues: Verify that your inventory contains valid, reachable hosts
+Credential Problems: Ensure the selected credentials have proper permissions
+Playbook Syntax: Check that the selected playbook has valid YAML syntax
+Privilege Escalation: Verify that privilege escalation is enabled if the playbook requires sudo
+Common Error Messages
+"Project sync failed"
+
+# Check project sync status
+# Navigate to Projects > Your Project > Jobs tab
+# Review the sync job output for specific error details
+"No hosts matched"
+
+# Verify inventory configuration
+# Ensure host patterns in playbook match inventory groups
+# Check that inventory sync completed successfully
+Best Practices
+Project Organization
+Use Descriptive Names: Choose clear, descriptive names for projects and templates
+Implement Version Control: Always use Git repositories for project source control
+Regular Syncing: Enable automatic syncing to keep projects up-to-date
+Documentation: Include comprehensive descriptions for all projects and templates
+Security Considerations
+Credential Management: Use Automation Controller's credential system instead of hardcoding secrets
+Access Control: Implement proper role-based access control (RBAC)
+Audit Logging: Regularly review job execution logs for security monitoring
+Secure Repositories: Use private repositories for sensitive automation content
+Conclusion
+In this lab, you have successfully:
+
+Created a new project in Ansible Automation Controller and linked it to a Git repository for version control
+Configured source control integration to automatically sync playbooks and roles from your Git repository
+Built job templates that define how your Ansible playbooks should be executed with specific inventories and credentials
+Learned project management best practices including organization, security, and troubleshooting techniques
+This foundation is crucial for managing enterprise automation at scale. By organizing your Ansible content into projects and creating reusable job templates, you can:
+
+Standardize automation processes across your organization
+Enable self-service automation for other teams through the web interface
+Maintain version control and change tracking for all automation content
+Scale automation operations efficiently across multiple environments
+These skills are essential for the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform exam and for real-world automation management scenarios. The project-based approach you've learned here forms the backbone of enterprise automation workflows, enabling teams to collaborate effectively while maintaining security and operational standards.
+
+Continue practicing by creating additional projects for different automation scenarios, such as network configuration, security compliance, or application deployment. Each project should represent a logical grouping of related automation tasks, making your automation infrastructure more maintainable and scalable.
