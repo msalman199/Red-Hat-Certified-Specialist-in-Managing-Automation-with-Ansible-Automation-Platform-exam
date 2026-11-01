@@ -1,0 +1,661 @@
+Lab 18: Install and Configure Automation Mesh
+Objectives
+By the end of this lab, you will be able to:
+
+Understand the architecture and benefits of Automation Mesh
+Install and configure Automation Mesh components using open-source tools
+Set up instance groups for distributed automation execution
+Configure job scheduling across mesh nodes
+Verify mesh functionality by running distributed automation jobs
+Troubleshoot common mesh connectivity and configuration issues
+Prerequisites
+Before starting this lab, you should have:
+
+Basic understanding of Ansible automation concepts
+Familiarity with Linux command line operations
+Knowledge of YAML configuration files
+Understanding of network concepts (SSH, ports, firewalls)
+Experience with container technologies (Docker/Podman)
+Basic knowledge of systemd services
+Lab Environment
+Al Nafi provides Linux-based cloud machines - simply click Start Lab to begin. No need to build your own VM or configure infrastructure. You will receive access to multiple pre-configured machines that simulate a distributed environment.
+
+Your lab environment includes:
+
+Control Node: Main automation controller
+Mesh Node 1: Execution node in "Region A"
+Mesh Node 2: Execution node in "Region B"
+Target Hosts: Systems to run automation against
+Task 1: Install Automation Mesh Components
+Subtask 1.1: Prepare the Environment
+First, let's verify our lab environment and prepare the necessary components.
+
+Connect to the Control Node
+# Verify system information
+hostnamectl
+cat /etc/os-release
+Update the system packages
+sudo dnf update -y
+sudo dnf install -y python3 python3-pip git wget curl
+Install Docker/Podman for containerized components
+# Install Podman (Red Hat's container engine)
+sudo dnf install -y podman podman-compose
+sudo systemctl enable --now podman
+Verify network connectivity between nodes
+# Test connectivity to mesh nodes (replace with actual IPs)
+ping -c 3 mesh-node-1
+ping -c 3 mesh-node-2
+Subtask 1.2: Install AWX (Open Source Automation Platform)
+AWX is the open-source upstream project for Red Hat Ansible Automation Platform.
+
+Clone the AWX Operator repository
+cd /opt
+sudo git clone https://github.com/ansible/awx-operator.git
+cd awx-operator
+Install kubectl and kind for Kubernetes deployment
+# Install kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+# Install kind (Kubernetes in Docker)
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+chmod +x ./kind
+sudo mv ./kind /usr/local/bin/kind
+Create a Kubernetes cluster using kind
+# Create cluster configuration
+cat > kind-cluster.yaml << EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+  - containerPort: 30080
+    hostPort: 30080
+    protocol: TCP
+EOF
+
+# Create the cluster
+kind create cluster --config kind-cluster.yaml --name awx-cluster
+Deploy AWX Operator
+# Set kubectl context
+kubectl cluster-info --context kind-awx-cluster
+
+# Install AWX Operator
+kubectl apply -f https://raw.githubusercontent.com/ansible/awx-operator/devel/deploy/awx-operator.yaml
+
+# Wait for operator to be ready
+kubectl wait --for=condition=available --timeout=300s deployment/awx-operator-controller-manager -n awx-operator-system
+Subtask 1.3: Deploy AWX Instance
+Create AWX instance configuration
+cat > awx-instance.yaml << EOF
+apiVersion: awx.ansible.com/v1beta1
+kind: AWX
+metadata:
+  name: awx-mesh-demo
+  namespace: default
+spec:
+  service_type: NodePort
+  nodeport_port: 30080
+  admin_user: admin
+  admin_password_secret: awx-admin-password
+  postgres_configuration_secret: awx-postgres-configuration
+  secret_key_secret: awx-secret-key
+EOF
+Create required secrets
+# Create admin password secret
+kubectl create secret generic awx-admin-password \
+  --from-literal=password=admin123
+
+# Create postgres configuration secret
+kubectl create secret generic awx-postgres-configuration \
+  --from-literal=host=awx-mesh-demo-postgres-13 \
+  --from-literal=port=5432 \
+  --from-literal=database=awx \
+  --from-literal=username=awx \
+  --from-literal=password=awxpass123 \
+  --from-literal=type=managed
+
+# Create secret key
+kubectl create secret generic awx-secret-key \
+  --from-literal=secret_key=$(openssl rand -base64 32)
+Deploy AWX instance
+kubectl apply -f awx-instance.yaml
+
+# Monitor deployment progress
+kubectl get pods -w
+Wait for AWX to be ready
+# Check AWX status
+kubectl get awx awx-mesh-demo
+
+# Wait for all pods to be running
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=awx-mesh-demo --timeout=600s
+Task 2: Configure Instance Groups and Job Scheduling
+Subtask 2.1: Access AWX Web Interface
+Get AWX service information
+# Check service status
+kubectl get svc
+
+# Get node IP for access
+kubectl get nodes -o wide
+Access AWX web interface
+Open your browser and navigate to: http://localhost:30080
+
+Username: admin
+Password: admin123
+Subtask 2.2: Install Execution Nodes
+Now we'll set up execution nodes on our mesh nodes.
+
+Connect to Mesh Node 1
+# SSH to mesh-node-1 (use provided credentials)
+ssh student@mesh-node-1
+Install receptor (the mesh networking component)
+# Install Python and pip
+sudo dnf install -y python3 python3-pip
+
+# Install receptor
+pip3 install --user receptor[work]
+
+# Add to PATH
+echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
+source ~/.bashrc
+Create receptor configuration for Mesh Node 1
+mkdir -p ~/receptor-config
+
+cat > ~/receptor-config/receptor.conf << EOF
+---
+- node:
+    id: mesh-node-1
+
+- log-level: info
+
+- control-service:
+    service: control
+    filename: /tmp/receptor-mesh-node-1.sock
+
+- work-command:
+    worktype: ansible-runner
+    command: ansible-runner
+    params: worker
+    allowruntimeparams: true
+
+- tcp-listener:
+    port: 27199
+
+- tcp-peer:
+    address: control-node:27199
+    redial: true
+EOF
+Start receptor service on Mesh Node 1
+# Create systemd service file
+sudo tee /etc/systemd/system/receptor.service << EOF
+[Unit]
+Description=Receptor
+After=network.target
+
+[Service]
+Type=simple
+User=student
+WorkingDirectory=/home/student
+ExecStart=/home/student/.local/bin/receptor -c /home/student/receptor-config/receptor.conf
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start service
+sudo systemctl daemon-reload
+sudo systemctl enable receptor
+sudo systemctl start receptor
+sudo systemctl status receptor
+Subtask 2.3: Configure Mesh Node 2
+Connect to Mesh Node 2
+# SSH to mesh-node-2
+ssh student@mesh-node-2
+Install receptor on Mesh Node 2
+# Install Python and pip
+sudo dnf install -y python3 python3-pip
+
+# Install receptor
+pip3 install --user receptor[work]
+
+# Add to PATH
+echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
+source ~/.bashrc
+Create receptor configuration for Mesh Node 2
+mkdir -p ~/receptor-config
+
+cat > ~/receptor-config/receptor.conf << EOF
+---
+- node:
+    id: mesh-node-2
+
+- log-level: info
+
+- control-service:
+    service: control
+    filename: /tmp/receptor-mesh-node-2.sock
+
+- work-command:
+    worktype: ansible-runner
+    command: ansible-runner
+    params: worker
+    allowruntimeparams: true
+
+- tcp-listener:
+    port: 27199
+
+- tcp-peer:
+    address: control-node:27199
+    redial: true
+EOF
+Start receptor service on Mesh Node 2
+# Create systemd service file
+sudo tee /etc/systemd/system/receptor.service << EOF
+[Unit]
+Description=Receptor
+After=network.target
+
+[Service]
+Type=simple
+User=student
+WorkingDirectory=/home/student
+ExecStart=/home/student/.local/bin/receptor -c /home/student/receptor-config/receptor.conf
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start service
+sudo systemctl daemon-reload
+sudo systemctl enable receptor
+sudo systemctl start receptor
+sudo systemctl status receptor
+Subtask 2.4: Configure Control Node Receptor
+Return to Control Node
+# Install receptor on control node
+pip3 install --user receptor[work]
+echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
+source ~/.bashrc
+Create control node receptor configuration
+mkdir -p ~/receptor-config
+
+cat > ~/receptor-config/receptor.conf << EOF
+---
+- node:
+    id: control-node
+
+- log-level: info
+
+- control-service:
+    service: control
+    filename: /tmp/receptor-control.sock
+
+- tcp-listener:
+    port: 27199
+
+- work-command:
+    worktype: ansible-runner
+    command: ansible-runner
+    params: worker
+    allowruntimeparams: true
+EOF
+Start receptor on control node
+# Create systemd service
+sudo tee /etc/systemd/system/receptor.service << EOF
+[Unit]
+Description=Receptor Control Node
+After=network.target
+
+[Service]
+Type=simple
+User=student
+WorkingDirectory=/home/student
+ExecStart=/home/student/.local/bin/receptor -c /home/student/receptor-config/receptor.conf
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start service
+sudo systemctl daemon-reload
+sudo systemctl enable receptor
+sudo systemctl start receptor
+sudo systemctl status receptor
+Subtask 2.5: Configure Instance Groups in AWX
+Access AWX web interface at http://localhost:30080
+
+Create Instance Groups
+
+Navigate to Administration → Instance Groups
+
+Create Region A Instance Group
+Click Add and configure:
+
+Name: region-a-group
+Policy Instance Minimum: 1
+Policy Instance Percentage: 100
+Create Region B Instance Group
+Click Add and configure:
+
+Name: region-b-group
+Policy Instance Minimum: 1
+Policy Instance Percentage: 100
+Add Instances to Groups
+For each instance group, click Instances tab and add the corresponding mesh nodes.
+
+Task 3: Verify Mesh Functionality by Running a Distributed Job
+Subtask 3.1: Create Test Inventory
+In AWX, navigate to Resources → Inventories
+
+Create a new inventory
+
+Click Add → Add Inventory:
+
+Name: mesh-test-inventory
+Description: Test inventory for mesh functionality
+Add hosts to inventory
+Click on the inventory, then Hosts → Add:
+
+Host 1:
+
+Name: target-host-1
+Variables:
+ansible_host: target-host-1
+region: region-a
+Host 2:
+
+Name: target-host-2
+Variables:
+ansible_host: target-host-2
+region: region-b
+Subtask 3.2: Create Test Project
+Navigate to Resources → Projects
+
+Create a new project
+
+Click Add:
+
+Name: mesh-test-project
+SCM Type: Git
+SCM URL: https://github.com/ansible/ansible-examples.git
+SCM Branch/Tag/Commit: main
+Sync the project
+Click the sync button and wait for completion.
+
+Subtask 3.3: Create Test Playbook
+Create a custom playbook for testing
+On the control node, create a test repository:
+
+mkdir -p ~/test-playbooks
+cd ~/test-playbooks
+
+# Initialize git repository
+git init
+git config user.name "Lab Student"
+git config user.email "student@example.com"
+Create a test playbook
+cat > mesh-test-playbook.yml << EOF
+---
+- name: Mesh Functionality Test
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display execution node information
+      debug:
+        msg: |
+          Executing on: {{ inventory_hostname }}
+          Ansible node: {{ ansible_hostname }}
+          Region: {{ region | default('unknown') }}
+          Date/Time: {{ ansible_date_time.iso8601 }}
+
+    - name: Create test file with node info
+      copy:
+        content: |
+          Execution Node: {{ ansible_hostname }}
+          Target Host: {{ inventory_hostname }}
+          Region: {{ region | default('unknown') }}
+          Execution Time: {{ ansible_date_time.iso8601 }}
+        dest: /tmp/mesh-test-{{ inventory_hostname }}.txt
+      become: yes
+
+    - name: Verify file creation
+      stat:
+        path: /tmp/mesh-test-{{ inventory_hostname }}.txt
+      register: test_file
+
+    - name: Display file status
+      debug:
+        msg: "Test file created successfully: {{ test_file.stat.exists }}"
+
+    - name: Run region-specific task
+      debug:
+        msg: "This task is running in {{ region | default('unknown region') }}"
+      when: region is defined
+
+    - name: Simulate work load
+      command: sleep 5
+      changed_when: false
+
+    - name: Final status
+      debug:
+        msg: "Mesh test completed successfully on {{ inventory_hostname }}"
+EOF
+Create inventory file
+cat > inventory.yml << EOF
+all:
+  children:
+    region_a:
+      hosts:
+        target-host-1:
+          ansible_host: target-host-1
+          region: region-a
+    region_b:
+      hosts:
+        target-host-2:
+          ansible_host: target-host-2
+          region: region-b
+EOF
+Commit to git
+git add .
+git commit -m "Initial mesh test playbook"
+Subtask 3.4: Create Job Templates
+In AWX, navigate to Resources → Templates
+
+Create Job Template for Region A
+
+Click Add → Add job template:
+
+Name: mesh-test-region-a
+Job Type: Run
+Inventory: mesh-test-inventory
+Project: mesh-test-project
+Playbook: mesh-test-playbook.yml
+Instance Groups: region-a-group
+Limit: region_a
+Create Job Template for Region B
+Click Add → Add job template:
+
+Name: mesh-test-region-b
+Job Type: Run
+Inventory: mesh-test-inventory
+Project: mesh-test-project
+Playbook: mesh-test-playbook.yml
+Instance Groups: region-b-group
+Limit: region_b
+Subtask 3.5: Execute Distributed Jobs
+Run Region A Job
+Navigate to the mesh-test-region-a template
+Click Launch
+Monitor the job execution
+Run Region B Job
+Navigate to the mesh-test-region-b template
+Click Launch
+Monitor the job execution
+Run Simultaneous Jobs
+Launch both job templates simultaneously to test concurrent execution across the mesh.
+
+Subtask 3.6: Verify Mesh Functionality
+Check job execution logs
+In AWX, navigate to Views → Jobs and examine the output of both jobs.
+
+Verify receptor connectivity
+On the control node:
+
+# Check receptor status
+receptor --socket /tmp/receptor-control.sock status
+
+# List connected nodes
+receptor --socket /tmp/receptor-control.sock ping mesh-node-1
+receptor --socket /tmp/receptor-control.sock ping mesh-node-2
+Check mesh node logs
+On each mesh node:
+
+# Check receptor service logs
+sudo journalctl -u receptor -f
+
+# Check for successful job executions
+ls -la /tmp/mesh-test-*.txt
+Verify load distribution
+# On control node, check job distribution
+kubectl logs -l app.kubernetes.io/name=awx-mesh-demo | grep -i "mesh\|receptor"
+Subtask 3.7: Test Mesh Resilience
+Simulate node failure
+On mesh-node-1:
+
+# Stop receptor service
+sudo systemctl stop receptor
+Run jobs and observe failover
+Launch the Region A job template and observe how AWX handles the unavailable node.
+
+Restore node and verify recovery
+# Restart receptor service
+sudo systemctl start receptor
+sudo systemctl status receptor
+Test automatic reconnection
+Launch jobs again to verify the mesh automatically recovers.
+
+Troubleshooting Common Issues
+Issue 1: Receptor Connection Problems
+Symptoms: Nodes not appearing in AWX or jobs failing to execute
+
+Solutions:
+
+# Check receptor service status
+sudo systemctl status receptor
+
+# Verify network connectivity
+telnet control-node 27199
+
+# Check firewall settings
+sudo firewall-cmd --list-all
+sudo firewall-cmd --add-port=27199/tcp --permanent
+sudo firewall-cmd --reload
+
+# Review receptor logs
+sudo journalctl -u receptor -n 50
+Issue 2: AWX Pod Issues
+Symptoms: AWX not accessible or pods crashing
+
+Solutions:
+
+# Check pod status
+kubectl get pods
+
+# Check pod logs
+kubectl logs -l app.kubernetes.io/name=awx-mesh-demo
+
+# Restart AWX deployment
+kubectl rollout restart deployment/awx-mesh-demo-web
+kubectl rollout restart deployment/awx-mesh-demo-task
+Issue 3: Job Execution Failures
+Symptoms: Jobs fail to run on mesh nodes
+
+Solutions:
+
+# Verify ansible-runner installation on mesh nodes
+ansible-runner --version
+
+# Check instance group assignments
+# In AWX: Administration → Instance Groups
+
+# Verify inventory and credentials
+# In AWX: Resources → Inventories → Hosts
+Issue 4: Performance Issues
+Symptoms: Slow job execution or timeouts
+
+Solutions:
+
+# Check system resources
+htop
+df -h
+
+# Monitor receptor performance
+receptor --socket /tmp/receptor-control.sock status
+
+# Adjust receptor configuration for better performance
+# Add to receptor.conf:
+# - tcp-listener:
+#     port: 27199
+#     cost: 1
+Conclusion
+Congratulations! You have successfully completed Lab 18: Install and Configure Automation Mesh. In this comprehensive lab, you have accomplished the following:
+
+Key Achievements
+Infrastructure Setup: You installed and configured a complete automation mesh using open-source tools including AWX, receptor, and Kubernetes.
+
+Mesh Architecture: You created a distributed automation environment with multiple execution nodes across different regions, demonstrating how to scale automation infrastructure.
+
+Instance Groups: You configured instance groups to organize and control where automation jobs execute, enabling geographic distribution and workload isolation.
+
+Distributed Execution: You successfully ran automation jobs across multiple mesh nodes, verifying that the mesh can distribute workloads effectively.
+
+Resilience Testing: You tested the mesh's ability to handle node failures and automatic recovery, demonstrating high availability capabilities.
+
+Why This Matters
+Scalability: Automation mesh allows organizations to scale their automation infrastructure horizontally across multiple locations, data centers, or cloud regions without creating bottlenecks.
+
+High Availability: By distributing execution nodes, you ensure that automation continues to function even if individual nodes fail, providing business continuity.
+
+Geographic Distribution: Organizations with global operations can run automation closer to their target systems, reducing latency and improving performance.
+
+Resource Optimization: Mesh architecture allows for better resource utilization by distributing workloads across multiple nodes based on capacity and location.
+
+Security: Mesh topology enables secure automation execution across network boundaries while maintaining centralized control and visibility.
+
+Real-World Applications
+The skills you've developed in this lab are directly applicable to:
+
+Multi-cloud automation across AWS, Azure, and Google Cloud
+Edge computing scenarios with distributed infrastructure
+Disaster recovery automation with geographically separated sites
+Compliance automation that must run in specific regions
+Large-scale infrastructure management across multiple data centers
+Next Steps
+To further develop your automation mesh expertise:
+
+Explore Advanced Configurations: Experiment with complex mesh topologies including hub-and-spoke and full mesh designs
+Integration Testing: Connect your mesh to external systems like monitoring tools and ITSM platforms
+Performance Tuning: Optimize mesh performance for your specific use cases and workload patterns
+Security Hardening: Implement advanced security features like mutual TLS and certificate-based authentication
+Monitoring and Observability: Set up comprehensive monitoring for your mesh infrastructure
+This lab has provided you with practical, hands-on experience that directly supports the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform certification objectives, particularly in the areas of scaling automation infrastructure and managing distributed automation environments.
+
+The automation mesh architecture you've implemented represents modern best practices for enterprise automation platforms, giving you valuable skills that are highly sought after in today's infrastructure automation landscape.
