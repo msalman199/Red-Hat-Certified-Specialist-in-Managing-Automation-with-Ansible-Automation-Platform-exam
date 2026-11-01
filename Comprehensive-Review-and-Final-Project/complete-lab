@@ -1,0 +1,340 @@
+Lab 20: Comprehensive Review and Final Project
+Objectives
+By the end of this lab, students will be able to:
+
+Deploy and configure a complete Ansible Automation Platform environment using AWX
+Configure inventories, credentials, and projects in the Automation Controller
+Create and execute job templates and workflows using best practices
+Monitor job execution and troubleshoot common automation and connectivity failures
+Implement role-based access control (RBAC) with organizations, teams, users, and permissions
+Prerequisites
+Before starting this lab, students should have:
+
+Completed Labs 1-19 in this course series
+Basic understanding of Linux command line operations
+Familiarity with YAML syntax and structure
+Knowledge of SSH key management
+Understanding of network concepts (IP addresses, ports, DNS)
+Experience with text editors (vim, nano, or similar)
+Basic understanding of containerization concepts (Docker)
+Required tools must be installed on the controller node before proceeding:
+
+sudo dnf install -y python3 python3-pip python3-devel git curl wget vim
+pip3 install --user ansible ansible-runner requests
+echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
+source ~/.bashrc
+
+sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+sudo dnf install -y docker-ce docker-ce-cli containerd.io
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+Verify versions before continuing:
+
+ansible --version
+docker --version
+docker-compose --version
+Lab Environment Setup
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment. No need to build your own virtual machines.
+
+Your lab environment includes:
+
+Controller Node: CentOS Stream 9 with 4GB RAM, 2 vCPUs
+Managed Nodes: 3x CentOS Stream 9 instances with 2GB RAM, 1 vCPU each
+All nodes have internet connectivity and can communicate with each other
+Task 1: Deploy Automation Controller (AWX) and Configure Connectivity
+Subtask 1.1: Configure SSH and Deploy AWX
+Generate an SSH key pair on the controller node and distribute it to managed nodes:
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/ansible_key -N ""
+
+ssh-copy-id -i ~/.ssh/ansible_key.pub user@managed-node-1
+ssh-copy-id -i ~/.ssh/ansible_key.pub user@managed-node-2
+ssh-copy-id -i ~/.ssh/ansible_key.pub user@managed-node-3
+
+ssh -i ~/.ssh/ansible_key user@managed-node-1 "hostname"
+Create the AWX deployment directory and compose file:
+mkdir -p ~/awx-deployment
+cd ~/awx-deployment
+
+cat > docker-compose.yml << 'EOF'
+version: '3.8'
+
+services:
+  web:
+    image: quay.io/ansible/awx:latest
+    container_name: awx_web
+    depends_on:
+      - redis
+      - postgres
+    ports:
+      - "80:8052"
+    hostname: awxweb
+    user: root
+    restart: unless-stopped
+    volumes:
+      - supervisor-socket:/var/run/supervisor
+      - rsyslog-socket:/var/run/awx-rsyslog/
+      - rsyslog-config:/var/lib/awx/rsyslog/
+      - "~/.ssh/ansible_key:/var/lib/awx/.ssh/id_rsa:ro"
+    environment:
+      SECRET_KEY: awxsecret
+      DATABASE_NAME: awx
+      DATABASE_USER: awx
+      DATABASE_PASSWORD: awxpass
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AWX_ADMIN_USER: admin
+      AWX_ADMIN_PASSWORD: password
+
+  task:
+    image: quay.io/ansible/awx:latest
+    container_name: awx_task
+    depends_on:
+      - redis
+      - postgres
+      - web
+    command: /usr/bin/launch_awx_task.sh
+    hostname: awx
+    user: root
+    restart: unless-stopped
+    volumes:
+      - supervisor-socket:/var/run/supervisor
+      - rsyslog-socket:/var/run/awx-rsyslog/
+      - rsyslog-config:/var/lib/awx/rsyslog/
+      - "~/.ssh/ansible_key:/var/lib/awx/.ssh/id_rsa:ro"
+    environment:
+      SECRET_KEY: awxsecret
+      DATABASE_NAME: awx
+      DATABASE_USER: awx
+      DATABASE_PASSWORD: awxpass
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AWX_ADMIN_USER: admin
+      AWX_ADMIN_PASSWORD: password
+
+  redis:
+    image: redis
+    container_name: awx_redis
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:13
+    container_name: awx_postgres
+    restart: unless-stopped
+    volumes:
+      - awx-db:/var/lib/postgresql/data:Z
+    environment:
+      POSTGRES_USER: awx
+      POSTGRES_PASSWORD: awxpass
+      POSTGRES_DB: awx
+
+volumes:
+  supervisor-socket:
+  rsyslog-socket:
+  rsyslog-config:
+  awx-db:
+EOF
+
+docker-compose up -d
+Monitor deployment and wait for readiness:
+docker-compose ps
+docker-compose logs -f web
+Wait 5-10 minutes, then verify:
+
+curl -k http://localhost/api/v2/ping/
+Deliverable and expected result: docker-compose ps shows awx_web, awx_task, awx_redis, and awx_postgres all in state Up. The curl command returns a JSON payload containing "instances" and version information (HTTP 200), confirming AWX is live and reachable on port 80.
+
+Subtask 1.2: Access AWX and Create Inventory, Credentials, Project
+Log in to the AWX web interface at http://your-controller-ip with username admin, password password. Confirm the Dashboard loads with no error banners.
+
+Create an inventory: - Navigate to Inventories > Add > Add Inventory - Name: Lab Environment, Organization: Default, click Save - Add a group named webservers - Add hosts managed-node-1, managed-node-2, managed-node-3 with variable: ```yaml
+ansible_host: managed-node-1 server_role: web
+
+(adjust hostname per entry), then associate `managed-node-1` and `managed-node-2` with the `webservers` group.
+Create a Machine credential:
+
+Navigate to Credentials > Add
+Name: Lab SSH Key, Credential Type: Machine, Username: user
+SSH Private Key: paste the contents of ~/.ssh/ansible_key
+Click Save
+Create a project backed by a local Git repository:
+
+cd ~
+mkdir -p ansible-project/{playbooks,inventories}
+cd ansible-project
+git init
+git config user.email "student@lab.com"
+git config user.name "Lab Student"
+
+cat > playbooks/system_info.yml << 'EOF'
+---
+- name: Gather System Information
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display system information
+      debug:
+        msg: |
+          Hostname: {{ inventory_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Memory: {{ ansible_memtotal_mb }}MB
+EOF
+
+cat > playbooks/deploy_webserver.yml << 'EOF'
+---
+- name: Deploy Web Server
+  hosts: webservers
+  become: yes
+  tasks:
+    - name: Install Apache
+      package:
+        name: httpd
+        state: present
+    - name: Start and enable Apache
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+    - name: Open firewall for HTTP
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+        immediate: yes
+EOF
+
+cat > inventories/hosts << 'EOF'
+[webservers]
+managed-node-1 ansible_host=managed-node-1
+managed-node-2 ansible_host=managed-node-2
+
+[databases]
+managed-node-3 ansible_host=managed-node-3
+
+[all:vars]
+ansible_user=user
+ansible_ssh_private_key_file=~/.ssh/ansible_key
+EOF
+
+git add .
+git commit -m "Initial project setup"
+Copy the project into AWX and register it:
+docker exec -it awx_web mkdir -p /var/lib/awx/projects/lab-project
+docker cp ~/ansible-project/. awx_web:/var/lib/awx/projects/lab-project/
+docker exec -it awx_web chown -R awx:awx /var/lib/awx/projects/lab-project
+In AWX: Projects > Add, Name: Lab Ansible Project, SCM Type: Manual, Project Base Path: /var/lib/awx/projects/lab-project, click Save, then click Sync on the project.
+
+Deliverable and expected result: The project's status indicator turns green ("Successful") after sync. The inventory shows 3 hosts and 1 group. The credential list shows Lab SSH Key of type Machine.
+
+Task 2: Build Job Templates, Execute Workflows, and Troubleshoot
+Subtask 2.1: Create and Launch Job Templates
+Create the System Information job template:
+
+Templates > Add > Add job template
+Name: System Information Gathering, Job Type: Run, Inventory: Lab Environment, Project: Lab Ansible Project, Playbook: playbooks/system_info.yml, Credentials: Lab SSH Key
+Click Save, then Launch
+Expected result: Job status transitions to Successful; the Output tab shows a debug message block per host with hostname, OS, and memory facts for all 3 managed nodes.
+
+Create the Web Server Deployment job template:
+
+Name: Deploy Web Servers, Playbook: playbooks/deploy_webserver.yml, Limit: webservers, Credentials: Lab SSH Key, enable Privilege Escalation
+Click Save, then Launch
+Expected result: Job status Successful, with changed tasks for package install, service start, and firewall rule on managed-node-1 and managed-node-2 only (not managed-node-3, since it is limited to webservers).
+
+Create a workflow template combining both:
+
+Templates > Add > Add workflow template, Name: Complete Deployment Workflow, Organization: Default, click Save
+Open Workflow Visualizer: add Start node, link to System Information Gathering, then on success link to Deploy Web Servers
+Click Save, then Launch
+Deliverable and expected result: The workflow visualizer shows both nodes marked green after execution, and the workflow job's overall status is Successful.
+
+Subtask 2.2: Monitor Jobs and Troubleshoot Connectivity
+Review job history: Navigate to Jobs, confirm at least three completed jobs are listed with status Successful. Click into the Deploy Web Servers job and confirm the Host Events tab shows ok or changed for managed-node-1 and managed-node-2.
+
+Query job statistics via the API:
+
+curl -u admin:password -k http://localhost/api/v2/jobs/?page_size=10
+Expected result: A JSON response listing recent jobs with "status": "successful" for each entry created in this task.
+
+Connectivity Troubleshooting (use this sequence whenever a job fails with "UNREACHABLE" or timeout errors):
+# 1. Check basic network reachability from the AWX container
+docker exec awx_web ping -c 3 managed-node-1
+
+# 2. Check DNS resolution from inside the container
+docker exec awx_web nslookup managed-node-1
+
+# 3. Verify the SSH private key was mounted with correct permissions
+docker exec awx_web ls -la /var/lib/awx/.ssh/
+
+# 4. Test SSH manually with verbose output to see the exact failure point
+docker exec awx_web ssh -v -i /var/lib/awx/.ssh/id_rsa user@managed-node-1
+Interpret the results as follows:
+
+If step 1 fails: the managed node is unreachable at the network level. Check firewall rules on the managed node (firewall-cmd --list-all) and confirm both nodes are on the same network/security group.
+If step 2 fails but step 1 succeeds: DNS resolution is broken inside the container. Add an explicit /etc/hosts entry or use IP addresses instead of hostnames in the inventory.
+If step 3 shows permissions other than 600 or shows the file missing: the volume mount failed or the key was not copied correctly; recheck the volumes section of docker-compose.yml and restart the web and task containers.
+If step 4 fails with "Permission denied": the public key was not copied to the managed node's authorized_keys, or the wrong username is being used; rerun ssh-copy-id for that node.
+If step 4 succeeds but AWX jobs still fail: check that the credential in AWX references the same private key and username used in this manual test.
+Run a direct connectivity check from inside the AWX container using Ansible itself:
+docker exec -it awx_web ansible all -i /var/lib/awx/projects/lab-project/inventories/hosts -m ping
+Deliverable and expected result: Every host returns "ping": "pong" with a green SUCCESS status. If any host fails, apply the four-step Connectivity Troubleshooting sequence above before re-running job templates.
+
+Task 3: Implement Role-Based Access Control (RBAC)
+Subtask 3.1: Create Organizations and Teams
+Create a new organization:
+
+Navigate to Organizations > Add
+Name: Development Team, Description: Development environment organization
+Click Save
+Create teams:
+
+Navigate to Teams > Add
+Name: Web Developers, Organization: Development Team, Description: Web development team
+Click Save
+Create a second team: Name: System Administrators, Organization: Default, Description: System administration team
+Click Save
+Deliverable and expected result: The Organizations list shows both Default and Development Team. The Teams list shows Web Developers (under Development Team) and System Administrators (under Default).
+
+Subtask 3.2: Create Users, Assign Team Membership, and Configure Permissions
+Create users:
+
+Navigate to Users > Add
+Username: webdev1, Email: webdev1@lab.com, First Name: Web, Last Name: Developer, Password: DevPassword123!, User Type: Normal User
+Click Save
+Repeat to create a second user: Username: sysadmin1, Email: sysadmin1@lab.com, First Name: System, Last Name: Administrator, Password: AdminPassword123!, User Type: Normal User
+Click Save
+Assign users to teams:
+
+Navigate to Teams > Web Developers > Users tab
+Click Add, select webdev1, click Save
+Navigate to Teams > System Administrators > Users tab
+Click Add, select sysadmin1, click Save
+Grant team-level permissions on resources:
+
+Navigate to Teams > Web Developers > Roles tab
+Click Add, select the Lab Ansible Project project, assign role Use, click Save
+Click Add again, select the Lab Environment inventory, assign role Read, click Save
+Navigate to Teams > System Administrators > Roles tab
+Click Add, select the Deploy Web Servers job template, assign role Admin, click Save
+Click Add again, select the Lab Environment inventory, assign role Admin, click Save
+Verify RBAC enforcement:
+
+Log out of the admin account
+Log in as webdev1 / DevPassword123!
+Navigate to Templates: confirm webdev1 can view the Lab Ansible Project project but cannot see an Admin gear icon to delete it, and cannot launch Deploy Web Servers (the job template should not appear, since only the project and inventory were granted, not the template itself)
+Log out, log back in as admin
+Deliverable and expected result: Logging in as webdev1 confirms restricted access consistent with the Use/Read roles granted (no delete capability on the project, no visibility into job templates that were not explicitly shared). Logging in as sysadmin1 and launching Deploy Web Servers succeeds because that user's team was granted the Admin role on that template. This confirms RBAC is correctly scoping access by team membership and role assignment rather than granting blanket admin rights.
+
+Expected Outcomes
+A fully running AWX instance with a synced project, populated inventory, machine credential, and at least two successful job template executions plus one successful workflow execution
+A documented, tested connectivity troubleshooting procedure that resolves the most common AWX-to-managed-node failure modes (network, DNS, SSH key permissions, and authentication)
+A working RBAC configuration with a custom organization, two teams, two users, and verified role-scoped access differing from the admin superuser view
+Conclusion
+In this lab, you deployed a complete Ansible Automation Platform environment from the ground up, standing up AWX in Docker containers, wiring it to real managed nodes over SSH, and registering an inventory, credential, and Git-backed project. You then built job templates and a multi-step workflow, executed them successfully, and used the AWX API and container-level diagnostic commands to monitor job health and systematically troubleshoot connectivity failures between the AWX web container and managed nodes. Finally, you implemented role-based access control by creating an organization, teams, and users, and verified that permissions were correctly scoped so that non-admin users only had the access explicitly granted to their team. With these skills, you are prepared to operate an Ansible Automation Platform deployment in a production-like setting, extend it with additional projects and credential types, and apply finer-grained RBAC policies as your automation environment grows.
