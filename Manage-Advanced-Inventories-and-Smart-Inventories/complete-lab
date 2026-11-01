@@ -1,0 +1,311 @@
+Lab 16: Manage Advanced Inventories and Smart Inventories
+Objectives
+By the end of this lab, students will be able to:
+
+Understand the concept and benefits of smart inventories in Ansible Automation Platform
+Create and configure smart inventories using dynamic filtering criteria
+Implement host filtering based on specific attributes and conditions
+Test and validate smart inventory functionality
+Manage dynamic host groups automatically based on real-time system properties
+Troubleshoot common smart inventory configuration issues
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Ansible concepts (playbooks, inventories, hosts)
+Familiarity with Ansible Automation Platform/AWX interface
+Knowledge of YAML syntax and JSON data structures
+Understanding of Linux system administration basics
+Completed previous labs on basic inventory management
+Access to multiple Linux hosts with varying characteristics (different OS versions, installed packages, etc.)
+Lab Environment Setup
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment. No need to build your own virtual machines or install software.
+
+Your lab environment includes:
+
+1 Ansible Automation Platform/AWX server (Controller node)
+4 managed Linux hosts with different configurations:
+2 CentOS/RHEL hosts
+2 Ubuntu hosts
+Various installed packages and system configurations
+Task 1: Create a Smart Inventory in Automation Controller
+Subtask 1.1: Access the Automation Controller Interface
+Log into AWX/Automation Controller
+
+Open your web browser and navigate to the AWX interface
+Use the provided credentials to log in
+Navigate to the main dashboard
+Verify Existing Inventories
+
+Click on Inventories in the left navigation menu
+Review the existing static inventories
+Note the hosts and their properties
+Subtask 1.2: Create Your First Smart Inventory
+Navigate to Smart Inventories
+
+In the Inventories section, click the Add dropdown
+Select Add smart inventory
+Configure Basic Smart Inventory Settings
+
+Name: Linux-Servers-Smart
+Description: Smart inventory for all Linux servers
+Organization: Default
+Set Up Initial Host Filter
+
+In the Host Filter field, enter:
+ansible_facts.ansible_system == "Linux"
+Save the Smart Inventory
+
+Click Save to create the smart inventory
+Verify it appears in your inventories list
+Subtask 1.3: Understanding Smart Inventory Components
+Review Smart Inventory Properties
+
+Click on your newly created smart inventory
+Examine the Details tab
+Note the Host Filter section and its syntax
+Understand Filter Syntax The host filter uses Django query syntax with the following format:
+
+ansible_facts.fact_name operator value
+Task 2: Filter and Manage Dynamic Hosts Based on Specific Criteria
+Subtask 2.1: Create Operating System-Based Smart Inventories
+Create CentOS/RHEL Smart Inventory
+
+Create a new smart inventory with these settings:
+Name: RedHat-Family-Smart
+Description: Smart inventory for RedHat family systems
+Host Filter: ansible_facts.ansible_os_family == "RedHat"
+Create Ubuntu Smart Inventory
+
+Create another smart inventory:
+Name: Debian-Family-Smart
+Description: Smart inventory for Debian family systems
+Host Filter: ansible_facts.ansible_os_family == "Debian"
+Verify Host Population
+
+Check each smart inventory to see which hosts are automatically included
+Navigate to the Hosts tab for each inventory
+Subtask 2.2: Create Advanced Filter Criteria
+Create Memory-Based Smart Inventory
+
+Create a smart inventory for high-memory systems:
+Name: High-Memory-Servers
+Description: Servers with more than 2GB RAM
+Host Filter: ansible_facts.ansible_memtotal_mb > 2048
+Create Multi-Criteria Smart Inventory
+
+Create a complex filter combining multiple criteria:
+Name: Production-Ready-Servers
+Description: Linux servers with sufficient resources
+Host Filter: ansible_facts.ansible_system == "Linux" and ansible_facts.ansible_memtotal_mb > 1024 and ansible_facts.ansible_processor_vcpus >= 2
+Subtask 2.3: Create Package-Based Smart Inventories
+Create Docker-Enabled Smart Inventory
+
+First, ensure some hosts have Docker installed
+Create a smart inventory:
+Name: Docker-Enabled-Hosts
+Description: Hosts with Docker installed
+Host Filter: "docker" in ansible_facts.ansible_pkg_mgr or "docker.io" in ansible_facts.get('packages', {})
+Create Web Server Smart Inventory
+
+Create an inventory for web servers:
+Name: Web-Servers-Smart
+Description: Hosts with web server packages
+Host Filter: "httpd" in ansible_facts.get('packages', {}) or "apache2" in ansible_facts.get('packages', {}) or "nginx" in ansible_facts.get('packages', {})
+Subtask 2.4: Implement Time-Based and Dynamic Filters
+Create Recently Updated Smart Inventory
+
+Create an inventory based on system update time:
+Name: Recently-Updated-Systems
+Description: Systems updated in the last 30 days
+Host Filter: ansible_facts.ansible_date_time.epoch|int - ansible_facts.get('ansible_pkg_mgr_last_update', 0) < 2592000
+Create Network-Based Smart Inventory
+
+Filter hosts by network configuration:
+Name: DMZ-Servers
+Description: Servers in DMZ network range
+Host Filter: ansible_facts.ansible_default_ipv4.address.startswith("192.168.100.")
+Task 3: Test the Smart Inventory Functionality
+Subtask 3.1: Verify Smart Inventory Population
+Check Host Counts
+
+Navigate to each smart inventory
+Verify the Hosts tab shows the expected hosts
+Compare with static inventories to ensure accuracy
+Validate Filter Logic
+
+For each smart inventory, manually verify that included hosts meet the criteria
+Check excluded hosts to ensure they don't meet the criteria
+Subtask 3.2: Test Dynamic Updates
+Modify Host Configuration
+
+Connect to one of your managed hosts
+Install a new package (e.g., Docker):
+# On CentOS/RHEL
+sudo yum install -y docker
+
+# On Ubuntu
+sudo apt-get update && sudo apt-get install -y docker.io
+Update Host Facts
+
+In AWX, navigate to Inventories → [Your Static Inventory]
+Select the modified host
+Click Run Command and execute:
+ansible-playbook -i inventory setup
+Or use the Sync button if available
+Verify Smart Inventory Updates
+
+Check if the host now appears in the Docker-enabled smart inventory
+Verify the change is reflected automatically
+Subtask 3.3: Create and Run Test Playbooks
+Create a Simple Test Playbook
+
+Navigate to Templates and create a new Job Template
+Create a playbook to test smart inventory functionality:
+---
+- name: Test Smart Inventory Functionality
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display host information
+      debug:
+        msg: |
+          Hostname: {{ ansible_hostname }}
+          OS Family: {{ ansible_os_family }}
+          Memory: {{ ansible_memtotal_mb }}MB
+          IP Address: {{ ansible_default_ipv4.address }}
+          
+    - name: Create inventory report file
+      copy:
+        content: |
+          Host: {{ ansible_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Memory: {{ ansible_memtotal_mb }}MB
+          CPUs: {{ ansible_processor_vcpus }}
+          IP: {{ ansible_default_ipv4.address }}
+        dest: /tmp/inventory_report_{{ ansible_hostname }}.txt
+      delegate_to: localhost
+Test Each Smart Inventory
+
+Run the test playbook against each smart inventory
+Verify that only the expected hosts are targeted
+Check the output for accuracy
+Subtask 3.4: Advanced Testing Scenarios
+Test Inventory Combinations
+
+Create a job template that uses multiple inventories
+Combine static and smart inventories in a single job
+Verify host deduplication works correctly
+Test Error Handling
+
+Create a smart inventory with an invalid filter:
+Name: Invalid-Filter-Test
+Host Filter: invalid_syntax == "test"
+Observe how the system handles the error
+Correct the filter and verify it works
+Performance Testing
+
+Create smart inventories with complex filters
+Measure the time it takes to populate large inventories
+Compare performance with static inventories
+Troubleshooting Common Issues
+Issue 1: Smart Inventory Shows No Hosts
+Symptoms: Smart inventory is created but shows 0 hosts
+
+Solutions:
+
+Verify host facts are up to date:
+
+ansible all -i inventory -m setup
+Check filter syntax:
+
+Ensure proper Django query format
+Verify fact names are correct
+Test with simpler filters first
+Validate fact availability:
+
+Check if the facts you're filtering on exist
+Use debug tasks to examine available facts
+Issue 2: Filter Syntax Errors
+Symptoms: Error messages when saving smart inventory
+
+Solutions:
+
+Common syntax corrections:
+
+# Correct
+ansible_facts.ansible_os_family == "RedHat"
+
+# Incorrect
+ansible_os_family == "RedHat"
+Use proper operators:
+
+== for equality
+!= for inequality
+>, <, >=, <= for comparisons
+in for containment
+and, or for logical operations
+Issue 3: Hosts Not Updating Dynamically
+Symptoms: Changes to hosts don't reflect in smart inventories
+
+Solutions:
+
+Force fact gathering:
+
+ansible-playbook -i inventory gather_facts.yml
+Check inventory sync settings
+
+Verify AWX/Controller has proper permissions to access hosts
+
+Advanced Smart Inventory Examples
+Example 1: Compliance-Based Inventory
+Name: Compliant-Servers
+Description: Servers meeting security compliance requirements
+Host Filter: ansible_facts.ansible_selinux.status == "enabled" and ansible_facts.ansible_memtotal_mb >= 4096 and "fail2ban" in ansible_facts.get('packages', {})
+Example 2: Maintenance Window Inventory
+Name: Maintenance-Window-Servers
+Description: Servers available for maintenance based on load
+Host Filter: ansible_facts.ansible_loadavg.1m < 2.0 and ansible_facts.ansible_memfree_mb > 512
+Example 3: Geographic-Based Inventory
+Name: East-Coast-Servers
+Description: Servers in East Coast data centers
+Host Filter: ansible_facts.ansible_hostname.startswith("east-") or ansible_facts.ansible_default_ipv4.address.startswith("10.1.")
+Best Practices for Smart Inventories
+Performance Optimization
+Use Specific Filters
+
+Avoid overly broad filters that match too many hosts
+Use indexed fields when possible
+Limit Complex Queries
+
+Break complex filters into multiple smart inventories
+Use simpler logic when possible
+Maintenance and Management
+Regular Review
+
+Periodically review smart inventory filters
+Update filters as infrastructure changes
+Documentation
+
+Document the purpose and logic of each smart inventory
+Maintain a mapping of business requirements to filters
+Testing
+
+Test filters in development before production
+Validate results regularly
+Conclusion
+In this lab, you have successfully:
+
+Created multiple smart inventories with various filtering criteria, enabling dynamic host management based on real-time system properties
+Implemented advanced filtering techniques using operating system families, hardware specifications, installed packages, and network configurations
+Tested smart inventory functionality through practical scenarios, including dynamic updates and validation procedures
+Learned troubleshooting techniques for common smart inventory issues and performance optimization
+Why This Matters: Smart inventories are crucial for modern infrastructure automation because they:
+
+Reduce Manual Maintenance: Automatically organize hosts based on current system state rather than static configuration
+Improve Accuracy: Ensure automation targets the right systems based on real-time facts
+Enable Dynamic Scaling: Automatically include new hosts that meet criteria without manual intervention
+Support Compliance: Easily identify and manage systems based on security and compliance requirements
+Enhance Operational Efficiency: Allow operations teams to focus on high-level automation rather than inventory management
+Smart inventories represent a significant advancement in infrastructure automation, enabling organizations to build more resilient, scalable, and maintainable automation solutions. The skills you've developed in this lab are essential for managing complex, dynamic environments in enterprise settings and are directly applicable to the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform certification exam.
+
+As you continue your automation journey, remember that smart inventories are most effective when combined with well-designed playbooks and proper fact gathering strategies. The dynamic nature of smart inventories makes them powerful tools for implementing infrastructure as code practices and supporting DevOps methodologies.
