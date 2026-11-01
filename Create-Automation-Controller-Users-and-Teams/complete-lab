@@ -1,0 +1,377 @@
+Lab 12: Create Automation Controller Users and Teams
+Objectives
+By the end of this lab, students will be able to:
+
+Create and configure teams in Ansible Automation Controller for organizational management
+Add users to teams and assign appropriate permissions
+Configure role-based access control (RBAC) for team members
+Verify team functionality and access permissions
+Understand best practices for user and team management in enterprise automation environments
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command line operations
+Familiarity with Ansible concepts and terminology
+Knowledge of user management principles
+Understanding of role-based access control concepts
+Completion of previous Ansible Automation Controller labs (Labs 1-11)
+Administrative access to an Ansible Automation Controller instance
+Lab Environment Setup
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines with Ansible Automation Controller already installed and configured. Simply click Start Lab to begin - no need to build your own virtual machine or install software.
+
+Your lab environment includes:
+
+Controller Node: CentOS/RHEL 8 with Ansible Automation Controller
+Managed Nodes: 2-3 additional Linux systems for testing
+Network Configuration: All systems pre-configured with SSH connectivity
+User Access: Administrative privileges on the controller system
+Task 1: Create a New Team for Automation Engineers
+Subtask 1.1: Access the Automation Controller Web Interface
+Open your web browser and navigate to the Automation Controller URL provided in your lab environment
+
+Log in using the administrator credentials:
+
+Username: admin
+Password: [provided in lab environment]
+Verify successful login by confirming you can see the main dashboard with navigation menu on the left side
+
+Subtask 1.2: Navigate to Teams Management
+Click on "Access" in the left navigation menu
+
+Select "Teams" from the Access submenu
+
+Review the current teams listed in the interface to understand the existing team structure
+
+Subtask 1.3: Create the Automation Engineers Team
+Click the "Add" button (+ icon) to create a new team
+
+Fill in the team details:
+
+Name: Automation Engineers
+Description: Team responsible for developing and maintaining automation workflows
+Organization: Default (or select your organization)
+Click "Save" to create the team
+
+Verify team creation by confirming "Automation Engineers" appears in the teams list
+
+Subtask 1.4: Configure Team Settings
+Click on the "Automation Engineers" team you just created
+
+Review the team details and note the available tabs:
+
+Details
+Users
+Permissions
+Roles
+Update team description if needed by clicking "Edit" and adding more specific information:
+
+Description: Team responsible for developing, testing, and maintaining 
+automation workflows, playbooks, and infrastructure as code solutions
+Task 2: Add Users to the Team and Assign Specific Access
+Subtask 2.1: Create New Users for the Team
+Navigate to Users by clicking "Access" → "Users" in the left menu
+
+Create the first automation engineer user:
+
+Click the "Add" button (+)
+Fill in user details:
+Username: engineer1
+Email: engineer1@company.com
+First Name: John
+Last Name: Engineer
+Password: SecurePass123!
+Confirm Password: SecurePass123!
+User Type: Normal User
+Click "Save"
+Create the second automation engineer user:
+
+Click the "Add" button (+) again
+Fill in user details:
+Username: engineer2
+Email: engineer2@company.com
+First Name: Jane
+Last Name: Developer
+Password: SecurePass456!
+Confirm Password: SecurePass456!
+User Type: Normal User
+Click "Save"
+Create a team lead user:
+
+Click the "Add" button (+)
+Fill in user details:
+Username: teamlead1
+Email: teamlead1@company.com
+First Name: Mike
+Last Name: Leader
+Password: LeaderPass789!
+Confirm Password: LeaderPass789!
+User Type: Normal User
+Click "Save"
+Subtask 2.2: Add Users to the Automation Engineers Team
+Navigate back to Teams by clicking "Access" → "Teams"
+
+Click on "Automation Engineers" team
+
+Click on the "Users" tab
+
+Add users to the team:
+
+Click the "Add" button (+)
+Select users from the available list:
+Check the box next to "engineer1"
+Check the box next to "engineer2"
+Check the box next to "teamlead1"
+Click "Save"
+Verify users were added by confirming all three users appear in the team's user list
+
+Subtask 2.3: Assign Team Roles and Permissions
+While in the Automation Engineers team, click on the "Roles" tab
+
+Assign team-level roles:
+
+Click "Add" to add a new role assignment
+For teamlead1:
+User: teamlead1
+Role: Admin
+Resource Type: Team
+Resource: Automation Engineers
+Click "Save"
+Assign project permissions:
+
+Click "Add" again
+For the team:
+User: [Select all team members]
+Role: Use
+Resource Type: Project
+Resource: [Select existing demo project or create one]
+Click "Save"
+Assign inventory permissions:
+
+Click "Add"
+Configure inventory access:
+User: [Select all team members]
+Role: Use
+Resource Type: Inventory
+Resource: Demo Inventory
+Click "Save"
+Subtask 2.4: Configure Granular Permissions
+Navigate to the "Permissions" tab within the Automation Engineers team
+
+Add specific permissions for job templates:
+
+Click "Add"
+Select permission type: "Job Template"
+Configure permissions:
+Resource: [Select available job templates]
+Role: Execute (for engineer1 and engineer2)
+Role: Admin (for teamlead1)
+Click "Save"
+Add credential permissions:
+
+Click "Add"
+Select permission type: "Credential"
+Configure access:
+Resource: [Select appropriate credentials]
+Role: Use (for all team members)
+Click "Save"
+Review all assigned permissions to ensure proper access control is in place
+
+Task 3: Verify Team Functionality
+Subtask 3.1: Test User Login and Access
+Open a new browser window or incognito tab
+
+Test engineer1 login:
+
+Navigate to the Automation Controller URL
+Login with:
+Username: engineer1
+Password: SecurePass123!
+Verify access level:
+Check that user can see assigned projects
+Verify user can access team inventories
+Confirm user cannot access admin functions
+Test teamlead1 login:
+
+Logout and login with:
+Username: teamlead1
+Password: LeaderPass789!
+Verify enhanced access:
+Check team management capabilities
+Verify ability to modify team resources
+Confirm administrative functions within team scope
+Subtask 3.2: Verify Team Resource Access
+While logged in as engineer1, navigate to different sections:
+
+Check Projects access:
+
+Go to "Resources" → "Projects"
+Verify you can see projects assigned to your team
+Try to create a new project (should be restricted)
+Check Inventories access:
+
+Go to "Resources" → "Inventories"
+Verify access to team inventories
+Check that you cannot see other teams' inventories
+Check Job Templates access:
+
+Go to "Resources" → "Templates"
+Verify you can see and execute assigned job templates
+Try to modify a template (permissions should be restricted)
+Subtask 3.3: Test Team Collaboration Features
+Create a test project for the team (as admin):
+
+Login as admin
+Navigate to "Resources" → "Projects"
+Click "Add"
+Configure project:
+Name: Team Automation Project
+Description: Shared project for Automation Engineers team
+Organization: Default
+SCM Type: Git
+SCM URL: https://github.com/ansible/ansible-examples.git
+Click "Save"
+Assign project to team:
+
+Go to the project's "Permissions" tab
+Add team permissions:
+Team: Automation Engineers
+Role: Use
+Click "Save"
+Test team access to shared project:
+
+Login as engineer1
+Verify the new project is visible and accessible
+Login as engineer2
+Confirm the same project access
+Subtask 3.4: Verify Team Management Functions
+Test team lead capabilities (login as teamlead1):
+
+Access team management:
+
+Navigate to "Access" → "Teams"
+Click on "Automation Engineers"
+Verify you can see team details and members
+Test user management within team:
+
+Try to add/remove team members
+Verify you can modify team member roles
+Check limitations on organization-wide changes
+Create a team-specific job template:
+
+Navigate to "Resources" → "Templates"
+Click "Add" → "Job Template"
+Configure template:
+Name: Team Health Check
+Job Type: Run
+Inventory: Demo Inventory
+Project: Team Automation Project
+Playbook: [Select available playbook]
+Set permissions to restrict access to team members only
+Subtask 3.5: Document Team Configuration
+Create team documentation by recording the following information:
+
+Team Structure:
+
+Team Name: Automation Engineers
+Team Members: 3 users
+- engineer1 (Standard User)
+- engineer2 (Standard User)  
+- teamlead1 (Team Admin)
+Permission Summary:
+
+Team Permissions:
+- Project Access: Team Automation Project (Use)
+- Inventory Access: Demo Inventory (Use)
+- Job Template Access: Team Health Check (Execute)
+- Credential Access: [List assigned credentials] (Use)
+Access Verification Results:
+
+✓ Users can login successfully
+✓ Team members see only assigned resources
+✓ Team lead has enhanced management capabilities
+✓ Proper isolation from other teams maintained
+Troubleshooting Common Issues
+Issue 1: User Cannot Login
+Symptoms: User receives authentication error when trying to login
+
+Solutions:
+
+Verify user credentials:
+
+# Check user exists in controller
+# Login as admin and verify user in Users list
+Check user status:
+
+Ensure user is marked as "Active"
+Verify user type is set correctly
+Confirm password meets complexity requirements
+Issue 2: User Cannot See Team Resources
+Symptoms: Team member cannot access projects, inventories, or templates
+
+Solutions:
+
+Verify team membership:
+
+Check user is properly added to team
+Confirm team permissions are assigned
+Check resource permissions:
+
+# Verify permissions are set at resource level
+# Check both team-level and individual permissions
+Issue 3: Team Lead Cannot Manage Team
+Symptoms: Team lead lacks expected administrative capabilities
+
+Solutions:
+
+Verify team admin role:
+
+Ensure user has "Admin" role for the team
+Check organization-level permissions if needed
+Review role hierarchy:
+
+Confirm role assignments are correct
+Verify no conflicting permissions exist
+Best Practices for Team Management
+Security Considerations
+Implement least privilege principle:
+
+Grant minimum necessary permissions
+Regularly review and audit team access
+Use role-based access control effectively
+Password and authentication policies:
+
+Enforce strong password requirements
+Consider implementing SSO integration
+Enable session timeout policies
+Organizational Structure
+Team naming conventions:
+
+Format: [Department]-[Function]-[Environment]
+Examples:
+- IT-Automation-Production
+- DevOps-Infrastructure-Development
+- Security-Compliance-All
+Role assignment strategy:
+
+Define clear role hierarchies
+Document permission matrices
+Implement approval workflows for changes
+Conclusion
+In this lab, you have successfully accomplished the following key objectives:
+
+Team Creation and Management: You created a comprehensive team structure for automation engineers, demonstrating how to organize users effectively within Ansible Automation Controller. This organizational approach is crucial for enterprise environments where different teams need isolated access to automation resources.
+
+User Administration: You learned to create users with appropriate permissions and add them to teams with specific roles. This includes understanding the difference between standard users and team administrators, which is essential for maintaining proper access control in production environments.
+
+Permission and Access Control: You implemented role-based access control (RBAC) by assigning granular permissions to team members for projects, inventories, job templates, and credentials. This ensures that users can only access resources necessary for their job functions while maintaining security boundaries.
+
+Verification and Testing: You validated the team functionality by testing user logins, verifying resource access, and confirming that permission boundaries work as expected. This testing approach is critical for ensuring that your access control implementation functions correctly before deploying to production.
+
+Why This Matters: Proper user and team management in Ansible Automation Controller is fundamental for:
+
+Security: Ensuring users only access resources they need
+Compliance: Meeting organizational and regulatory requirements
+Scalability: Supporting growth as teams and automation needs expand
+Collaboration: Enabling effective teamwork while maintaining proper boundaries
+Audit Trail: Providing clear accountability for automation activities
+The skills you've developed in this lab are directly applicable to the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform exam and are essential for managing enterprise automation environments effectively. Understanding team and user management will enable you to design and implement secure, scalable automation solutions that meet organizational requirements while maintaining proper governance and control.
