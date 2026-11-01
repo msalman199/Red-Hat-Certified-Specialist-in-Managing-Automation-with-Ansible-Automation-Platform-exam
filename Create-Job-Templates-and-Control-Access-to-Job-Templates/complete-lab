@@ -1,0 +1,561 @@
+Lab 15: Create Job Templates and Control Access to Job Templates
+Objectives
+By the end of this lab, you will be able to:
+
+Create and configure job templates in Ansible Automation Platform
+Implement Role-Based Access Control (RBAC) for job templates
+Assign appropriate permissions to users and teams for template access
+Test job template execution with different user roles
+Understand the security implications of template access control
+Configure template-level permissions for standardized automation workflows
+Prerequisites
+Before starting this lab, you should have:
+
+Basic understanding of Ansible playbooks and YAML syntax
+Familiarity with Linux command line operations
+Knowledge of Ansible Automation Platform web interface
+Understanding of user management concepts
+Completed previous labs on Ansible basics and inventory management
+Access to Ansible Automation Platform (AWX) web interface
+Lab Environment Setup
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines with Ansible Automation Platform already installed. Simply click Start Lab to access your environment - no need to build your own VM or install software.
+
+Your lab environment includes:
+
+Ansible Automation Platform (AWX) web interface
+Pre-configured inventory with managed nodes
+Sample playbooks and roles
+Multiple user accounts for RBAC testing
+Task 1: Create Job Templates for Different Playbooks
+Subtask 1.1: Access Ansible Automation Platform
+Open your web browser and navigate to the AWX web interface
+Log in with the administrator credentials provided in your lab environment
+Familiarize yourself with the main dashboard and navigation menu
+Subtask 1.2: Create Sample Playbooks
+First, let's create some sample playbooks that we'll use for our job templates.
+
+Navigate to Projects in the left sidebar
+
+Click Add to create a new project
+
+Fill in the project details:
+
+Name: Lab15-Playbooks
+Organization: Default
+SCM Type: Manual
+Playbook Directory: /var/lib/awx/projects/lab15
+Create the project directory and sample playbooks:
+
+# Connect to your AWX server via SSH
+sudo mkdir -p /var/lib/awx/projects/lab15
+cd /var/lib/awx/projects/lab15
+
+# Create a web server setup playbook
+sudo tee web-server-setup.yml << 'EOF'
+---
+- name: Configure Web Server
+  hosts: web_servers
+  become: yes
+  tasks:
+    - name: Install Apache
+      package:
+        name: httpd
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Install Apache on Ubuntu
+      package:
+        name: apache2
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Start and enable Apache
+      service:
+        name: "{{ 'httpd' if ansible_os_family == 'RedHat' else 'apache2' }}"
+        state: started
+        enabled: yes
+
+    - name: Create index.html
+      copy:
+        content: |
+          <html>
+          <head><title>Lab 15 Web Server</title></head>
+          <body>
+            <h1>Web Server Configured Successfully</h1>
+            <p>Managed by Ansible Job Template</p>
+          </body>
+          </html>
+        dest: "{{ '/var/www/html/index.html' if ansible_os_family == 'RedHat' else '/var/www/html/index.html' }}"
+        mode: '0644'
+EOF
+
+# Create a system maintenance playbook
+sudo tee system-maintenance.yml << 'EOF'
+---
+- name: System Maintenance Tasks
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update package cache
+      package:
+        update_cache: yes
+      when: ansible_os_family in ["RedHat", "Debian"]
+
+    - name: Check disk usage
+      shell: df -h
+      register: disk_usage
+
+    - name: Display disk usage
+      debug:
+        var: disk_usage.stdout_lines
+
+    - name: Check system uptime
+      shell: uptime
+      register: system_uptime
+
+    - name: Display uptime
+      debug:
+        var: system_uptime.stdout
+
+    - name: Clean temporary files
+      file:
+        path: /tmp/*
+        state: absent
+      ignore_errors: yes
+EOF
+
+# Create a user management playbook
+sudo tee user-management.yml << 'EOF'
+---
+- name: User Management
+  hosts: all
+  become: yes
+  vars:
+    app_users:
+      - username: webadmin
+        groups: wheel
+      - username: appuser
+        groups: users
+  tasks:
+    - name: Create application users
+      user:
+        name: "{{ item.username }}"
+        groups: "{{ item.groups }}"
+        state: present
+        create_home: yes
+      loop: "{{ app_users }}"
+
+    - name: Set up SSH directory for users
+      file:
+        path: "/home/{{ item.username }}/.ssh"
+        state: directory
+        owner: "{{ item.username }}"
+        group: "{{ item.username }}"
+        mode: '0700'
+      loop: "{{ app_users }}"
+EOF
+
+# Set proper ownership
+sudo chown -R awx:awx /var/lib/awx/projects/lab15
+Return to the AWX web interface and sync the project by clicking the Sync button
+Subtask 1.3: Create Job Templates
+Now let's create job templates for each playbook.
+
+Create Web Server Setup Template
+Navigate to Templates in the left sidebar
+
+Click Add and select Job Template
+
+Configure the template:
+
+Name: Web Server Setup
+Job Type: Run
+Inventory: Select your available inventory
+Project: Lab15-Playbooks
+Playbook: web-server-setup.yml
+Credentials: Select appropriate machine credentials
+Limit: web_servers
+Options: Check "Enable Privilege Escalation"
+Labels: web, production
+Click Save
+
+Create System Maintenance Template
+Click Add and select Job Template
+
+Configure the template:
+
+Name: System Maintenance
+Job Type: Run
+Inventory: Select your available inventory
+Project: Lab15-Playbooks
+Playbook: system-maintenance.yml
+Credentials: Select appropriate machine credentials
+Options: Check "Enable Privilege Escalation"
+Labels: maintenance, system
+Click Save
+
+Create User Management Template
+Click Add and select Job Template
+
+Configure the template:
+
+Name: User Management
+Job Type: Run
+Inventory: Select your available inventory
+Project: Lab15-Playbooks
+Playbook: user-management.yml
+Credentials: Select appropriate machine credentials
+Options: Check "Enable Privilege Escalation"
+Labels: users, security
+Click Save
+
+Subtask 1.4: Configure Template Variables and Surveys
+Let's add a survey to the User Management template to make it more interactive.
+
+Navigate to the User Management template
+
+Click Edit
+
+Scroll down to the Survey section and click Add
+
+Configure the survey:
+
+Prompt: Username to create
+Answer Variable Name: new_username
+Answer Type: Text
+Required: Yes
+Default Answer: testuser
+Add another survey question:
+
+Prompt: User Groups
+Answer Variable Name: user_groups
+Answer Type: Text
+Required: Yes
+Default Answer: users
+Click Save for each survey question
+
+Enable the survey by checking Survey Enabled
+
+Click Save to save the template
+
+Task 2: Use RBAC to Assign Permissions for Job Templates
+Subtask 2.1: Create User Accounts
+First, let's create different user accounts with varying levels of access.
+
+Navigate to Access → Users in the left sidebar
+Click Add to create a new user
+Create Web Administrator User
+Fill in the user details:
+
+Username: webadmin
+Email: webadmin@company.com
+First Name: Web
+Last Name: Administrator
+Password: SecurePass123!
+Confirm Password: SecurePass123!
+User Type: Normal User
+Click Save
+
+Create System Operator User
+Click Add to create another user:
+
+Username: sysoperator
+Email: sysoperator@company.com
+First Name: System
+Last Name: Operator
+Password: SecurePass123!
+Confirm Password: SecurePass123!
+User Type: Normal User
+Click Save
+
+Create Read-Only User
+Click Add to create a third user:
+
+Username: readonly
+Email: readonly@company.com
+First Name: Read
+Last Name: Only
+Password: SecurePass123!
+Confirm Password: SecurePass123!
+User Type: Normal User
+Click Save
+
+Subtask 2.2: Create Teams and Assign Users
+Navigate to Access → Teams
+Click Add to create a new team
+Create Web Team
+Configure the team:
+
+Name: Web Team
+Description: Team responsible for web server management
+Organization: Default
+Click Save
+
+Click on the Users tab
+
+Click Add and select the webadmin user
+
+Click Save
+
+Create Operations Team
+Click Add to create another team:
+
+Name: Operations Team
+Description: Team responsible for system operations
+Organization: Default
+Click Save
+
+Add the sysoperator user to this team
+
+Create Monitoring Team
+Create a third team:
+
+Name: Monitoring Team
+Description: Team with read-only access for monitoring
+Organization: Default
+Add the readonly user to this team
+
+Subtask 2.3: Assign Template Permissions
+Now let's assign specific permissions to each team for different job templates.
+
+Assign Web Server Template Permissions
+Navigate to Templates and click on Web Server Setup
+
+Click on the Permissions tab
+
+Click Add to add permissions
+
+Select Teams and choose Web Team
+
+Select the following permissions:
+
+Execute: Allow the team to run the template
+Read: Allow the team to view the template
+Click Save
+
+Assign System Maintenance Template Permissions
+Navigate to the System Maintenance template
+
+Click on the Permissions tab
+
+Add permissions for Operations Team:
+
+Execute: Yes
+Read: Yes
+Admin: Yes (full control over the template)
+Add permissions for Monitoring Team:
+
+Read: Yes (view only)
+Click Save for each permission set
+
+Assign User Management Template Permissions
+Navigate to the User Management template
+
+Click on the Permissions tab
+
+Add permissions for Operations Team:
+
+Execute: Yes
+Read: Yes
+Do not assign any permissions to Web Team or Monitoring Team for this template
+
+Subtask 2.4: Configure Organization-Level Permissions
+Navigate to Access → Organizations
+Click on Default organization
+Click on the Permissions tab
+Add organization-level permissions:
+Web Team Organization Permissions
+Member: Basic organization access
+Job Template Admin: For web-related templates only
+Operations Team Organization Permissions
+Member: Basic organization access
+Execute: Can run jobs
+Job Template Admin: Can manage job templates
+Monitoring Team Organization Permissions
+Member: Basic organization access
+Read: Can view resources
+Task 3: Test Job Execution
+Subtask 3.1: Test Web Administrator Access
+Log out of the admin account
+
+Log in as webadmin with password SecurePass123!
+
+Navigate to Templates
+
+Verify that you can see:
+
+Web Server Setup template (should be visible and executable)
+System Maintenance template (should not be visible or have limited access)
+User Management template (should not be visible)
+Click on Web Server Setup template
+
+Click Launch to run the job
+
+Monitor the job execution and verify it completes successfully
+
+Subtask 3.2: Test System Operator Access
+Log out and log in as sysoperator
+
+Navigate to Templates
+
+Verify access to templates:
+
+System Maintenance: Full access (execute, read, admin)
+User Management: Execute and read access
+Web Server Setup: No access
+Launch the System Maintenance job:
+
+Click on the template
+Click Launch
+Monitor the execution
+Test the User Management template with survey:
+
+Click on User Management
+Click Launch
+Fill in the survey:
+Username to create: testoperator
+User Groups: wheel
+Click Launch
+Monitor the job execution
+Subtask 3.3: Test Read-Only User Access
+Log out and log in as readonly
+
+Navigate to Templates
+
+Verify that you can:
+
+See the System Maintenance template
+View template details
+Cannot launch jobs (Launch button should be disabled or missing)
+Try to access other templates and verify they are not visible
+
+Subtask 3.4: Test Permission Violations
+Let's test what happens when users try to access resources they don't have permissions for.
+
+While logged in as readonly, try to:
+
+Navigate directly to a restricted template URL
+Access the Templates → Add function
+Modify any existing templates
+Document the error messages and access denials
+
+Subtask 3.5: Advanced Permission Testing
+Test Credential Access Control
+Log in as webadmin
+Navigate to Credentials
+Verify that you can only see credentials you have permissions for
+Try to create a new credential and note any restrictions
+Test Inventory Access Control
+Navigate to Inventories
+Check which inventories are visible to different user roles
+Test inventory modification permissions
+Verification and Troubleshooting
+Verify Template Functionality
+Log in as admin
+Navigate to Jobs to view all job executions
+Verify that jobs ran successfully for each user
+Check job output and logs for any errors
+Common Issues and Solutions
+Issue: User Cannot See Expected Templates
+Solution:
+
+Check team membership
+Verify template permissions are correctly assigned
+Ensure organization permissions are set
+Issue: Job Fails with Permission Errors
+Solution:
+
+Verify credential permissions
+Check inventory access rights
+Ensure proper escalation privileges
+Issue: Survey Not Displaying
+Solution:
+
+Confirm survey is enabled on the template
+Check that user has execute permissions
+Verify survey questions are properly configured
+Validation Commands
+Run these commands to verify your setup:
+
+# Check AWX users
+awx-manage list_users
+
+# Verify team memberships
+awx-manage shell -c "
+from awx.main.models import Team, User
+for team in Team.objects.all():
+    print(f'Team: {team.name}')
+    for user in team.member_role.members.all():
+        print(f'  - {user.username}')
+"
+
+# Check template permissions
+awx-manage shell -c "
+from awx.main.models import JobTemplate
+for template in JobTemplate.objects.all():
+    print(f'Template: {template.name}')
+    print(f'  Execute permissions: {template.execute_role.members.count()}')
+    print(f'  Read permissions: {template.read_role.members.count()}')
+"
+Advanced Configuration
+Subtask 3.6: Create Custom Roles
+For more granular control, let's create custom roles.
+
+Navigate to Access → Roles
+
+Click Add to create a custom role
+
+Configure a Template Executor role:
+
+Name: Template Executor
+Description: Can execute specific templates only
+Permissions: Execute on selected job templates
+Assign this role to specific users for fine-grained access control
+
+Subtask 3.7: Implement Workflow Templates with RBAC
+Navigate to Templates and create a Workflow Job Template
+
+Name it Complete Deployment Workflow
+
+Add the following workflow steps:
+
+System Maintenance (first)
+User Management (second, on success)
+Web Server Setup (third, on success)
+Configure workflow-level permissions:
+
+Operations Team: Full access
+Web Team: Read-only access
+Monitoring Team: No access
+Conclusion
+In this lab, you have successfully:
+
+Created multiple job templates for different automation tasks including web server setup, system maintenance, and user management
+Implemented comprehensive RBAC by creating users, teams, and assigning appropriate permissions
+Tested access control by verifying that different users can only access and execute templates according to their assigned permissions
+Configured advanced features like surveys and workflow templates with proper access controls
+Validated security measures by testing permission violations and access restrictions
+Key Takeaways
+Job Templates provide a standardized way to execute Ansible playbooks with consistent parameters and security controls. They serve as the foundation for automation governance in enterprise environments.
+
+Role-Based Access Control (RBAC) is crucial for maintaining security and operational boundaries in automation platforms. Proper RBAC implementation ensures that users can only perform actions appropriate to their role and responsibilities.
+
+Permission Testing is essential to validate that access controls work as intended. Regular testing helps identify security gaps and ensures compliance with organizational policies.
+
+Real-World Applications
+This lab simulates real enterprise scenarios where:
+
+Web teams need access only to web-related automation
+Operations teams require broader system access for maintenance tasks
+Monitoring teams need read-only access for oversight and compliance
+Security policies mandate strict access controls for sensitive operations like user management
+The skills learned in this lab are directly applicable to Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform certification and real-world enterprise automation deployments.
+
+Next Steps
+Consider exploring:
+
+Advanced workflow templates with conditional logic
+Integration with external authentication systems (LDAP, SAML)
+Audit logging and compliance reporting
+Custom credential types for specialized automation tasks
+API-based template management for programmatic control
