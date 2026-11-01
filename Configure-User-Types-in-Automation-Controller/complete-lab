@@ -1,0 +1,384 @@
+Lab 10: Configure User Types in Automation Controller
+Objectives
+By the end of this lab, you will be able to:
+
+• Create different user types (admin, standard, and read-only users) in Ansible Automation Controller • Assign users to appropriate teams with proper role-based access control • Configure and verify RBAC setup to ensure proper access permissions • Understand the security implications of different user roles in automation environments • Implement best practices for user management in enterprise automation platforms
+
+Prerequisites
+Before starting this lab, you should have:
+
+• Basic understanding of Linux command line operations • Familiarity with web-based interfaces and navigation • Knowledge of user management concepts in enterprise systems • Understanding of role-based access control (RBAC) principles • Completed previous Ansible Automation Controller labs or equivalent experience
+
+Required Knowledge Areas:
+Basic authentication and authorization concepts
+Understanding of teams and organizations in enterprise software
+Familiarity with JSON and YAML formats
+Basic networking concepts for web applications
+Lab Environment Setup
+Al Nafi Cloud Environment: This lab uses pre-configured Linux-based cloud machines provided by Al Nafi. Simply click Start Lab to access your environment - no VM setup required.
+
+Environment Details:
+Operating System: Red Hat Enterprise Linux 9 or CentOS Stream 9
+Ansible Automation Controller: Latest community version (AWX)
+Web Browser: Firefox or Chrome pre-installed
+Network Access: Full internet connectivity for package downloads
+Task 1: Access and Prepare Automation Controller
+Subtask 1.1: Connect to Your Lab Environment
+Click Start Lab in the Al Nafi platform
+Wait for environment initialization (approximately 2-3 minutes)
+Open the terminal from the desktop environment
+Verify system status by running:
+sudo systemctl status awx-web
+sudo systemctl status awx-task
+Subtask 1.2: Access the Web Interface
+Open Firefox browser from the desktop
+
+Navigate to the Automation Controller:
+
+http://localhost:8080
+Login with default credentials:
+
+Username: admin
+Password: password
+Verify successful login by checking the dashboard appears
+
+Subtask 1.3: Understand the Current Environment
+Navigate to Users section in the left sidebar
+Review existing users (should show only the admin user)
+Navigate to Teams section to see current team structure
+Navigate to Organizations to understand the organizational hierarchy
+Task 2: Create Different User Types
+Subtask 2.1: Create an Admin User
+Navigate to Users from the left sidebar menu
+
+Click the Add button (+ icon) to create a new user
+
+Fill in the admin user details:
+
+Username: admin-user-1
+Email: admin1@company.com
+First Name: Admin
+Last Name: User One
+Password: SecureAdminPass123!
+Confirm Password: SecureAdminPass123!
+User Type: System Administrator
+Enable the following options:
+
+Active: Checked
+Superuser: Checked
+Click Save to create the admin user
+
+Verify creation by checking the user appears in the users list
+
+Subtask 2.2: Create a Standard User
+Click Add button again to create another user
+
+Fill in the standard user details:
+
+Username: standard-user-1
+Email: standard1@company.com
+First Name: Standard
+Last Name: User One
+Password: SecureStandardPass123!
+Confirm Password: SecureStandardPass123!
+User Type: Normal User
+Configure standard user settings:
+
+Active: Checked
+Superuser: Unchecked
+Click Save to create the standard user
+
+Subtask 2.3: Create a Read-Only User
+Click Add button to create the third user
+
+Fill in the read-only user details:
+
+Username: readonly-user-1
+Email: readonly1@company.com
+First Name: ReadOnly
+Last Name: User One
+Password: SecureReadOnlyPass123!
+Confirm Password: SecureReadOnlyPass123!
+User Type: Normal User
+Configure read-only user settings:
+
+Active: Checked
+Superuser: Unchecked
+Click Save to create the read-only user
+
+Subtask 2.4: Verify User Creation
+Navigate back to Users list
+
+Confirm all three users are visible:
+
+admin-user-1 (System Administrator)
+standard-user-1 (Normal User)
+readonly-user-1 (Normal User)
+Take note of user IDs for later reference
+
+Task 3: Create and Configure Teams
+Subtask 3.1: Create Admin Team
+Navigate to Teams from the left sidebar
+
+Click Add button to create a new team
+
+Fill in team details:
+
+Name: Administrators
+Description: System administrators with full access
+Organization: Default
+Click Save to create the team
+
+Subtask 3.2: Create Operations Team
+Click Add button to create another team
+
+Fill in team details:
+
+Name: Operations
+Description: Standard operations team with execution rights
+Organization: Default
+Click Save to create the operations team
+
+Subtask 3.3: Create Auditors Team
+Click Add button to create the third team
+
+Fill in team details:
+
+Name: Auditors
+Description: Read-only access for auditing purposes
+Organization: Default
+Click Save to create the auditors team
+
+Task 4: Assign Users to Teams
+Subtask 4.1: Assign Admin User to Administrators Team
+Click on the Administrators team from the teams list
+Navigate to the Users tab within the team details
+Click Add button to add users to the team
+Select admin-user-1 from the available users
+Choose the role: Admin
+Click Save to assign the user
+Subtask 4.2: Assign Standard User to Operations Team
+Navigate back to Teams and click on Operations team
+Go to the Users tab
+Click Add button
+Select standard-user-1 from available users
+Choose the role: Member
+Click Save to assign the user
+Subtask 4.3: Assign Read-Only User to Auditors Team
+Navigate back to Teams and click on Auditors team
+Go to the Users tab
+Click Add button
+Select readonly-user-1 from available users
+Choose the role: Member
+Click Save to assign the user
+Task 5: Configure Role-Based Access Control (RBAC)
+Subtask 5.1: Set Up Project Permissions
+Navigate to Projects from the left sidebar
+
+Create a test project by clicking Add:
+
+Name: Test-RBAC-Project
+Description: Project for testing RBAC
+Organization: Default
+SCM Type: Git
+SCM URL: https://github.com/ansible/ansible-examples.git
+Click Save to create the project
+
+Subtask 5.2: Configure Team Permissions for Projects
+Click on the Test-RBAC-Project
+
+Navigate to the Permissions tab
+
+Click Add button to add team permissions
+
+Add Administrators team permissions:
+
+Team: Administrators
+Role: Admin
+Click Save
+Add Operations team permissions:
+
+Team: Operations
+Role: Use
+Click Save
+Add Auditors team permissions:
+
+Team: Auditors
+Role: Read
+Click Save
+Subtask 5.3: Create Job Templates with Different Access Levels
+Navigate to Templates from the left sidebar
+
+Click Add and select Job Template
+
+Create an admin-level job template:
+
+Name: Admin-Only-Template
+Job Type: Run
+Inventory: Demo Inventory
+Project: Test-RBAC-Project
+Playbook: hello_world.yml
+Click Save
+
+Navigate to Permissions tab of the template
+
+Add permissions:
+
+Administrators team: Admin role
+Operations team: Execute role
+Auditors team: Read role
+Task 6: Verify RBAC Setup
+Subtask 6.1: Test Admin User Access
+Logout from current session (click user menu → Logout)
+
+Login as admin-user-1:
+
+Username: admin-user-1
+Password: SecureAdminPass123!
+Verify admin access:
+
+Can see all users, teams, and projects
+Can create, modify, and delete resources
+Has access to system settings
+Navigate through different sections to confirm full access
+
+Subtask 6.2: Test Standard User Access
+Logout and login as standard-user-1:
+
+Username: standard-user-1
+Password: SecureStandardPass123!
+Verify standard user access:
+
+Can see assigned projects and templates
+Can execute job templates
+Cannot access user management or system settings
+Try to access Users section - should be restricted
+
+Navigate to Templates and verify execution permissions
+
+Subtask 6.3: Test Read-Only User Access
+Logout and login as readonly-user-1:
+
+Username: readonly-user-1
+Password: SecureReadOnlyPass123!
+Verify read-only access:
+
+Can view projects and templates
+Cannot execute job templates
+Cannot modify any resources
+Try to run a job template - should show permission denied
+
+Verify all modification buttons are disabled or hidden
+
+Subtask 6.4: Document Access Verification
+Create a verification table in a text file:
+nano rbac_verification.txt
+Add the following content:
+RBAC Verification Results
+========================
+
+Admin User (admin-user-1):
+- User Management: ✓ Full Access
+- Project Management: ✓ Full Access
+- Template Execution: ✓ Full Access
+- System Settings: ✓ Full Access
+
+Standard User (standard-user-1):
+- User Management: ✗ No Access
+- Project Management: ✓ Limited Access
+- Template Execution: ✓ Full Access
+- System Settings: ✗ No Access
+
+Read-Only User (readonly-user-1):
+- User Management: ✗ No Access
+- Project Management: ✓ Read-Only Access
+- Template Execution: ✗ No Access
+- System Settings: ✗ No Access
+Save the file with Ctrl+X, Y, Enter
+Task 7: Advanced RBAC Configuration
+Subtask 7.1: Create Custom Roles (Optional Advanced Step)
+Login back as the original admin user
+Navigate to Roles (if available in your AWX version)
+Create a custom role for specific permissions:
+# Using AWX CLI (if installed)
+awx roles create --name "Custom-Operator" --description "Custom operator role"
+Subtask 7.2: Set Up Inventory Permissions
+Navigate to Inventories
+
+Create a test inventory:
+
+Name: Production-Inventory
+Description: Production servers inventory
+Organization: Default
+Configure inventory permissions:
+
+Administrators: Admin access
+Operations: Use access
+Auditors: Read access
+Subtask 7.3: Test Cross-Resource Permissions
+Create job templates that use the new inventory
+Test access with different user types
+Verify permission inheritance from teams to resources
+Troubleshooting Common Issues
+Issue 1: Users Cannot Login
+Symptoms: Login fails with correct credentials
+
+Solutions:
+
+Verify user is active:
+
+# Check user status in database
+sudo docker exec -it awx_postgres psql -U awx -d awx -c "SELECT username, is_active FROM auth_user;"
+Reset user password if needed through admin interface
+
+Issue 2: Permissions Not Working
+Symptoms: Users see resources they shouldn't access
+
+Solutions:
+
+Clear browser cache and cookies
+Verify team assignments are correct
+Check role assignments on resources
+Issue 3: Teams Not Showing Proper Access
+Symptoms: Team members don't inherit expected permissions
+
+Solutions:
+
+Verify organization membership
+Check team role assignments
+Restart AWX services:
+sudo docker restart awx_web awx_task
+Best Practices for User Management
+Security Best Practices
+Use strong passwords for all user accounts
+Implement least privilege principle - give minimum required access
+Regular audit of user permissions and team memberships
+Use teams instead of individual permissions for easier management
+Document role assignments and access requirements
+Operational Best Practices
+Create standardized naming conventions for users and teams
+Use descriptive team names that reflect their purpose
+Regular cleanup of inactive users and unused teams
+Implement approval workflows for user creation and permission changes
+Monitor user activity through audit logs
+Conclusion
+In this comprehensive lab, you have successfully:
+
+• Created three different user types (admin, standard, and read-only) with appropriate access levels • Established team-based organization for better permission management • Implemented role-based access control (RBAC) to secure your Automation Controller environment • Verified proper access restrictions through hands-on testing with different user accounts • Learned troubleshooting techniques for common user management issues
+
+Why This Matters
+Enterprise Security: Proper user management is crucial for maintaining security in enterprise automation environments. By implementing RBAC, you ensure that users only have access to the resources they need for their job functions.
+
+Compliance Requirements: Many organizations must meet regulatory compliance standards that require proper access controls and audit trails. The skills learned in this lab directly support these requirements.
+
+Operational Efficiency: Team-based permission management scales better than individual user permissions, making it easier to manage large numbers of users and maintain consistent access policies.
+
+Career Relevance: These skills are directly applicable to the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform exam and are highly valued in DevOps and automation engineering roles.
+
+Next Steps
+Practice with larger user bases to understand scaling challenges
+Explore integration with external authentication systems (LDAP, Active Directory)
+Learn about API-based user management for automated provisioning
+Study audit logging and compliance reporting features
+Investigate advanced RBAC patterns for complex organizational structures
+This lab provides the foundation for managing users and permissions in production Ansible Automation Controller environments, preparing you for real-world automation platform administration challenges.
