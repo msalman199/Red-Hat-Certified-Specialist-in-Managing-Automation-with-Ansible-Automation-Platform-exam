@@ -1,0 +1,543 @@
+Lab 13: Manage Inventories and Credentials
+Objectives
+By the end of this lab, students will be able to:
+
+Understand the concept of inventories in Ansible automation
+Create and configure inventories for web servers
+Generate and manage SSH key pairs for secure authentication
+Add machine credentials to Ansible for system authentication
+Verify inventory setup and connectivity
+Troubleshoot common inventory and credential issues
+Prerequisites
+Before starting this lab, students should have:
+
+Basic understanding of Linux command line operations
+Familiarity with SSH concepts and remote server access
+Basic knowledge of YAML syntax
+Understanding of Ansible fundamentals (playbooks, modules, tasks)
+Experience with text editors like vim or nano
+Lab Environment
+Ready-to-Use Cloud Machines: Al Nafi provides pre-configured Linux-based cloud machines for this lab. Simply click Start Lab to access your environment - no need to build your own virtual machines.
+
+Your lab environment includes:
+
+Control Node: CentOS/RHEL 8 with Ansible installed
+Managed Nodes: 2 web servers (web1 and web2) running CentOS/RHEL 8
+All machines are networked and accessible via SSH
+Task 1: Create an Inventory for Web Servers
+Subtask 1.1: Understanding Ansible Inventories
+An inventory in Ansible is a file that defines the hosts and groups of hosts upon which commands, modules, and tasks in a playbook operate. Think of it as your contact list for all the servers you want to manage.
+
+Subtask 1.2: Create the Project Directory Structure
+First, let's create a proper directory structure for our Ansible project:
+
+# Create the main project directory
+mkdir -p ~/ansible-lab13
+cd ~/ansible-lab13
+
+# Create subdirectories for organization
+mkdir -p inventories group_vars host_vars playbooks
+Subtask 1.3: Create a Basic Inventory File
+Create your first inventory file for web servers:
+
+# Create the inventory file
+nano inventories/webservers.ini
+Add the following content to the inventory file:
+
+# Web Servers Inventory
+# This inventory defines our web server infrastructure
+
+[webservers]
+web1 ansible_host=192.168.1.10 ansible_user=ansible
+web2 ansible_host=192.168.1.11 ansible_user=ansible
+
+[webservers:vars]
+# Group variables for all web servers
+ansible_python_interpreter=/usr/bin/python3
+http_port=80
+https_port=443
+server_role=webserver
+
+[production:children]
+webservers
+
+[production:vars]
+environment=prod
+backup_enabled=true
+Key Concepts Explained:
+
+[webservers]: Defines a group named "webservers"
+ansible_host: Specifies the actual IP address or hostname
+ansible_user: Defines the user account for SSH connections
+[webservers:vars]: Sets variables for all hosts in the webservers group
+[production:children]: Creates a parent group containing child groups
+Subtask 1.4: Create a YAML-based Inventory
+Modern Ansible practices favor YAML format. Create an alternative YAML inventory:
+
+# Create YAML inventory
+nano inventories/webservers.yml
+Add the following YAML content:
+
+---
+# YAML-based inventory for web servers
+all:
+  children:
+    webservers:
+      hosts:
+        web1:
+          ansible_host: 192.168.1.10
+          ansible_user: ansible
+          server_id: web01
+          datacenter: east
+        web2:
+          ansible_host: 192.168.1.11
+          ansible_user: ansible
+          server_id: web02
+          datacenter: west
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+        http_port: 80
+        https_port: 443
+        server_role: webserver
+    production:
+      children:
+        webservers:
+      vars:
+        environment: prod
+        backup_enabled: true
+        monitoring_enabled: true
+Subtask 1.5: Test Inventory Parsing
+Verify that Ansible can properly parse your inventory files:
+
+# Test INI format inventory
+ansible-inventory -i inventories/webservers.ini --list
+
+# Test YAML format inventory
+ansible-inventory -i inventories/webservers.yml --list --yaml
+
+# View specific group information
+ansible-inventory -i inventories/webservers.yml --graph
+Task 2: Add Machine Credentials (SSH Keys) for System Authentication
+Subtask 2.1: Understanding SSH Key Authentication
+SSH key authentication is more secure than password authentication. It uses a pair of cryptographic keys:
+
+Private Key: Kept secret on your control machine
+Public Key: Copied to target servers you want to access
+Subtask 2.2: Generate SSH Key Pairs
+Generate a new SSH key pair specifically for Ansible automation:
+
+# Generate SSH key pair
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/ansible_key -C "ansible-automation-key"
+
+# When prompted:
+# - Press Enter for no passphrase (for automation purposes)
+# - Press Enter again to confirm
+
+# Verify key generation
+ls -la ~/.ssh/ansible_key*
+Subtask 2.3: Configure SSH Key Permissions
+Set proper permissions for security:
+
+# Set correct permissions for private key
+chmod 600 ~/.ssh/ansible_key
+
+# Set correct permissions for public key
+chmod 644 ~/.ssh/ansible_key.pub
+
+# Display the public key (you'll need this for the next step)
+cat ~/.ssh/ansible_key.pub
+Subtask 2.4: Distribute Public Keys to Managed Nodes
+Copy the public key to your managed nodes. In a real environment, you would do this for each server:
+
+# Copy public key to web1 (replace with actual IP)
+ssh-copy-id -i ~/.ssh/ansible_key.pub ansible@192.168.1.10
+
+# Copy public key to web2 (replace with actual IP)
+ssh-copy-id -i ~/.ssh/ansible_key.pub ansible@192.168.1.11
+
+# Alternative method if ssh-copy-id is not available:
+# cat ~/.ssh/ansible_key.pub | ssh ansible@192.168.1.10 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+Subtask 2.5: Configure Ansible to Use SSH Keys
+Create an Ansible configuration file to specify SSH key usage:
+
+# Create ansible.cfg in your project directory
+nano ansible.cfg
+Add the following configuration:
+
+[defaults]
+# Inventory file location
+inventory = inventories/webservers.yml
+
+# SSH private key file
+private_key_file = ~/.ssh/ansible_key
+
+# Disable host key checking for lab environment
+host_key_checking = False
+
+# Enable SSH pipelining for better performance
+pipelining = True
+
+# Set default remote user
+remote_user = ansible
+
+# Timeout settings
+timeout = 30
+
+[ssh_connection]
+# SSH connection settings
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o UserKnownHostsFile=/dev/null
+control_path_dir = ~/.ansible/cp
+Subtask 2.6: Create Credential Management Scripts
+Create a script to manage SSH credentials:
+
+# Create credentials management script
+nano scripts/manage_credentials.sh
+Add the following script content:
+
+#!/bin/bash
+# Ansible Credentials Management Script
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+SSH_KEY_PATH="$HOME/.ssh/ansible_key"
+
+# Function to check if SSH key exists
+check_ssh_key() {
+    if [[ -f "$SSH_KEY_PATH" ]]; then
+        echo "✓ SSH key found at $SSH_KEY_PATH"
+        return 0
+    else
+        echo "✗ SSH key not found at $SSH_KEY_PATH"
+        return 1
+    fi
+}
+
+# Function to test SSH connectivity
+test_ssh_connectivity() {
+    local host=$1
+    local user=$2
+    
+    echo "Testing SSH connectivity to $user@$host..."
+    
+    if ssh -i "$SSH_KEY_PATH" -o ConnectTimeout=10 -o BatchMode=yes "$user@$host" "echo 'SSH connection successful'" 2>/dev/null; then
+        echo "✓ SSH connection to $host successful"
+        return 0
+    else
+        echo "✗ SSH connection to $host failed"
+        return 1
+    fi
+}
+
+# Function to display key fingerprint
+show_key_fingerprint() {
+    if check_ssh_key; then
+        echo "SSH Key Fingerprint:"
+        ssh-keygen -lf "$SSH_KEY_PATH"
+        echo ""
+        echo "Public Key Content:"
+        cat "${SSH_KEY_PATH}.pub"
+    fi
+}
+
+# Main execution
+case "${1:-help}" in
+    "check")
+        check_ssh_key
+        ;;
+    "test")
+        if [[ -n "$2" && -n "$3" ]]; then
+            test_ssh_connectivity "$2" "$3"
+        else
+            echo "Usage: $0 test <host> <user>"
+            echo "Example: $0 test 192.168.1.10 ansible"
+        fi
+        ;;
+    "fingerprint")
+        show_key_fingerprint
+        ;;
+    "help"|*)
+        echo "Ansible Credentials Management Script"
+        echo "Usage: $0 {check|test|fingerprint|help}"
+        echo ""
+        echo "Commands:"
+        echo "  check       - Check if SSH key exists"
+        echo "  test        - Test SSH connectivity to a host"
+        echo "  fingerprint - Show SSH key fingerprint and public key"
+        echo "  help        - Show this help message"
+        ;;
+esac
+Make the script executable:
+
+chmod +x scripts/manage_credentials.sh
+Task 3: Verify Inventory Setup
+Subtask 3.1: Test Inventory Connectivity
+Test basic connectivity to all hosts in your inventory:
+
+# Test connectivity using ping module
+ansible all -m ping
+
+# Test with specific inventory file
+ansible all -i inventories/webservers.yml -m ping
+
+# Test specific group
+ansible webservers -m ping
+Subtask 3.2: Gather System Information
+Collect basic system information from your managed nodes:
+
+# Gather facts from all hosts
+ansible all -m setup --tree /tmp/facts
+
+# Get specific information
+ansible webservers -m setup -a "filter=ansible_distribution*"
+
+# Check disk space
+ansible webservers -m shell -a "df -h"
+
+# Check memory usage
+ansible webservers -m shell -a "free -m"
+Subtask 3.3: Create Inventory Verification Playbook
+Create a comprehensive playbook to verify your inventory setup:
+
+# Create verification playbook
+nano playbooks/verify_inventory.yml
+Add the following playbook content:
+
+---
+- name: Verify Inventory Setup and Connectivity
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display host information
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          IP Address: {{ ansible_host }}
+          User: {{ ansible_user }}
+          Python Interpreter: {{ ansible_python_interpreter }}
+          Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}
+
+    - name: Test file system access
+      file:
+        path: /tmp/ansible_test
+        state: directory
+        mode: '0755'
+
+    - name: Create test file with host information
+      copy:
+        content: |
+          Ansible Test File
+          Host: {{ inventory_hostname }}
+          Date: {{ ansible_date_time.iso8601 }}
+          User: {{ ansible_user_id }}
+        dest: /tmp/ansible_test/host_info.txt
+        mode: '0644'
+
+    - name: Verify sudo access (if applicable)
+      command: sudo -n true
+      register: sudo_test
+      failed_when: false
+      changed_when: false
+
+    - name: Display sudo status
+      debug:
+        msg: "Sudo access: {{ 'Available' if sudo_test.rc == 0 else 'Not available or requires password' }}"
+
+    - name: Test network connectivity
+      uri:
+        url: "http://www.google.com"
+        method: HEAD
+        timeout: 10
+      register: network_test
+      failed_when: false
+
+    - name: Display network status
+      debug:
+        msg: "Internet connectivity: {{ 'Available' if network_test.status == 200 else 'Limited or unavailable' }}"
+
+    - name: Clean up test files
+      file:
+        path: /tmp/ansible_test
+        state: absent
+Subtask 3.4: Run Verification Playbook
+Execute the verification playbook:
+
+# Run the verification playbook
+ansible-playbook playbooks/verify_inventory.yml
+
+# Run with verbose output for troubleshooting
+ansible-playbook playbooks/verify_inventory.yml -v
+
+# Run against specific group
+ansible-playbook playbooks/verify_inventory.yml --limit webservers
+Subtask 3.5: Create Inventory Report
+Generate a comprehensive inventory report:
+
+# Create inventory report script
+nano scripts/inventory_report.sh
+Add the following script:
+
+#!/bin/bash
+# Generate Ansible Inventory Report
+
+INVENTORY_FILE="inventories/webservers.yml"
+REPORT_FILE="reports/inventory_report_$(date +%Y%m%d_%H%M%S).txt"
+
+# Create reports directory
+mkdir -p reports
+
+# Generate report
+{
+    echo "========================================="
+    echo "ANSIBLE INVENTORY REPORT"
+    echo "Generated: $(date)"
+    echo "========================================="
+    echo ""
+    
+    echo "INVENTORY STRUCTURE:"
+    echo "-------------------"
+    ansible-inventory -i "$INVENTORY_FILE" --graph
+    echo ""
+    
+    echo "ALL HOSTS LIST:"
+    echo "---------------"
+    ansible-inventory -i "$INVENTORY_FILE" --list
+    echo ""
+    
+    echo "CONNECTIVITY TEST:"
+    echo "------------------"
+    ansible all -i "$INVENTORY_FILE" -m ping
+    echo ""
+    
+    echo "HOST FACTS SUMMARY:"
+    echo "-------------------"
+    ansible all -i "$INVENTORY_FILE" -m setup -a "filter=ansible_distribution*,ansible_memtotal_mb,ansible_processor_count"
+    
+} > "$REPORT_FILE"
+
+echo "Inventory report generated: $REPORT_FILE"
+Make the script executable and run it:
+
+chmod +x scripts/inventory_report.sh
+./scripts/inventory_report.sh
+Subtask 3.6: Troubleshooting Common Issues
+Create a troubleshooting guide and script:
+
+# Create troubleshooting script
+nano scripts/troubleshoot.sh
+Add troubleshooting content:
+
+#!/bin/bash
+# Ansible Troubleshooting Script
+
+echo "ANSIBLE TROUBLESHOOTING CHECKLIST"
+echo "=================================="
+
+# Check Ansible installation
+echo "1. Checking Ansible installation..."
+if command -v ansible >/dev/null 2>&1; then
+    echo "✓ Ansible is installed: $(ansible --version | head -n1)"
+else
+    echo "✗ Ansible is not installed"
+fi
+
+# Check SSH key
+echo ""
+echo "2. Checking SSH key..."
+if [[ -f ~/.ssh/ansible_key ]]; then
+    echo "✓ SSH private key exists"
+    echo "Key fingerprint: $(ssh-keygen -lf ~/.ssh/ansible_key)"
+else
+    echo "✗ SSH private key not found"
+fi
+
+# Check inventory file
+echo ""
+echo "3. Checking inventory file..."
+if [[ -f inventories/webservers.yml ]]; then
+    echo "✓ Inventory file exists"
+    echo "Validating syntax..."
+    if ansible-inventory -i inventories/webservers.yml --list >/dev/null 2>&1; then
+        echo "✓ Inventory syntax is valid"
+    else
+        echo "✗ Inventory syntax error"
+    fi
+else
+    echo "✗ Inventory file not found"
+fi
+
+# Check ansible.cfg
+echo ""
+echo "4. Checking Ansible configuration..."
+if [[ -f ansible.cfg ]]; then
+    echo "✓ ansible.cfg exists"
+    echo "Current configuration:"
+    ansible-config dump --only-changed
+else
+    echo "! ansible.cfg not found (using defaults)"
+fi
+
+# Test connectivity
+echo ""
+echo "5. Testing connectivity..."
+echo "Running ping test..."
+ansible all -m ping 2>&1 | head -20
+Make it executable:
+
+chmod +x scripts/troubleshoot.sh
+Common Issues and Solutions
+Issue 1: SSH Connection Refused
+Problem: Cannot connect to managed nodes via SSH Solution:
+
+# Check if SSH service is running on target hosts
+ansible all -m shell -a "systemctl status sshd" --ask-pass
+
+# Verify SSH key permissions
+ls -la ~/.ssh/ansible_key*
+chmod 600 ~/.ssh/ansible_key
+Issue 2: Permission Denied (publickey)
+Problem: SSH key authentication fails Solution:
+
+# Verify public key is in authorized_keys
+ssh ansible@192.168.1.10 "cat ~/.ssh/authorized_keys"
+
+# Re-copy public key if needed
+ssh-copy-id -i ~/.ssh/ansible_key.pub ansible@192.168.1.10
+Issue 3: Inventory Parsing Errors
+Problem: Ansible cannot parse inventory file Solution:
+
+# Validate YAML syntax
+python3 -c "import yaml; yaml.safe_load(open('inventories/webservers.yml'))"
+
+# Check for common YAML issues (indentation, special characters)
+ansible-inventory -i inventories/webservers.yml --list
+Conclusion
+In this lab, you have successfully:
+
+Created comprehensive inventories for web servers using both INI and YAML formats, learning how to organize and group your infrastructure
+Generated and managed SSH key pairs for secure, automated authentication between your control node and managed systems
+Configured Ansible to use SSH keys for passwordless authentication, enabling seamless automation workflows
+Verified your inventory setup through multiple testing methods, ensuring reliable connectivity and proper configuration
+Why This Matters
+Inventory and credential management forms the foundation of any Ansible automation strategy. In enterprise environments, you might manage hundreds or thousands of servers across different environments (development, staging, production). Proper inventory organization allows you to:
+
+Target specific groups of servers for updates or configuration changes
+Apply different configurations based on server roles or environments
+Scale automation efforts efficiently across large infrastructures
+Maintain security through proper SSH key management
+SSH key authentication eliminates the need for password-based authentication, providing:
+
+Enhanced security through cryptographic authentication
+Automated workflows without manual password entry
+Audit trails for access and changes
+Centralized credential management
+Next Steps
+With your inventory and credentials properly configured, you're now ready to:
+
+Create more complex playbooks that target specific server groups
+Implement role-based automation for different server types
+Set up automated deployment pipelines
+Explore Ansible Vault for encrypting sensitive data
+Scale your automation to larger, more complex infrastructures
+This foundational knowledge prepares you for the Red Hat Certified Specialist in Managing Automation with Ansible Automation Platform exam and real-world automation scenarios.

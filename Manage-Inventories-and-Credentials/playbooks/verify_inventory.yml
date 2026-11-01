@@ -1,0 +1,56 @@
+---
+- name: Verify Inventory Setup and Connectivity
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Display host information
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          IP Address: {{ ansible_host }}
+          User: {{ ansible_user }}
+          Python Interpreter: {{ ansible_python_interpreter }}
+          Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}
+
+    - name: Test file system access
+      file:
+        path: /tmp/ansible_test
+        state: directory
+        mode: '0755'
+
+    - name: Create test file with host information
+      copy:
+        content: |
+          Ansible Test File
+          Host: {{ inventory_hostname }}
+          Date: {{ ansible_date_time.iso8601 }}
+          User: {{ ansible_user_id }}
+        dest: /tmp/ansible_test/host_info.txt
+        mode: '0644'
+
+    - name: Verify sudo access (if applicable)
+      command: sudo -n true
+      register: sudo_test
+      failed_when: false
+      changed_when: false
+
+    - name: Display sudo status
+      debug:
+        msg: "Sudo access: {{ 'Available' if sudo_test.rc == 0 else 'Not available or requires password' }}"
+
+    - name: Test network connectivity
+      uri:
+        url: "http://www.google.com"
+        method: HEAD
+        timeout: 10
+      register: network_test
+      failed_when: false
+
+    - name: Display network status
+      debug:
+        msg: "Internet connectivity: {{ 'Available' if network_test.status == 200 else 'Limited or unavailable' }}"
+
+    - name: Clean up test files
+      file:
+        path: /tmp/ansible_test
+        state: absent

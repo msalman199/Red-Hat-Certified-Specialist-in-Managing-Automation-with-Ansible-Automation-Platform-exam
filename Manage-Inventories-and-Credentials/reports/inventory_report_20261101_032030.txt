@@ -1,0 +1,95 @@
+=========================================
+ANSIBLE INVENTORY REPORT
+Generated: Sun Nov  1 03:20:30 UTC 2026
+=========================================
+
+INVENTORY STRUCTURE:
+-------------------
+@all:
+  |--@ungrouped:
+  |--@webservers:
+  |  |--web1
+  |  |--web2
+  |--@production:
+  |  |--@webservers:
+  |  |  |--web1
+  |  |  |--web2
+
+ALL HOSTS LIST:
+---------------
+{
+    "_meta": {
+        "hostvars": {
+            "web1": {
+                "ansible_host": "192.168.1.10",
+                "ansible_python_interpreter": "/usr/bin/python3",
+                "ansible_user": "ansible",
+                "backup_enabled": true,
+                "datacenter": "east",
+                "environment": "prod",
+                "http_port": 80,
+                "https_port": 443,
+                "monitoring_enabled": true,
+                "server_id": "web01",
+                "server_role": "webserver"
+            },
+            "web2": {
+                "ansible_host": "192.168.1.11",
+                "ansible_python_interpreter": "/usr/bin/python3",
+                "ansible_user": "ansible",
+                "backup_enabled": true,
+                "datacenter": "west",
+                "environment": "prod",
+                "http_port": 80,
+                "https_port": 443,
+                "monitoring_enabled": true,
+                "server_id": "web02",
+                "server_role": "webserver"
+            }
+        }
+    },
+    "all": {
+        "children": [
+            "ungrouped",
+            "webservers",
+            "production"
+        ]
+    },
+    "production": {
+        "children": [
+            "webservers"
+        ]
+    },
+    "webservers": {
+        "hosts": [
+            "web1",
+            "web2"
+        ]
+    }
+}
+
+CONNECTIVITY TEST:
+------------------
+web1 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Data could not be sent to remote host \"192.168.1.10\". Make sure this host can be reached over ssh: ssh: connect to host 192.168.1.10 port 22: Connection timed out\r\n",
+    "unreachable": true
+}
+web2 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Data could not be sent to remote host \"192.168.1.11\". Make sure this host can be reached over ssh: ssh: connect to host 192.168.1.11 port 22: Connection timed out\r\n",
+    "unreachable": true
+}
+
+HOST FACTS SUMMARY:
+-------------------
+web1 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Data could not be sent to remote host \"192.168.1.10\". Make sure this host can be reached over ssh: ssh: connect to host 192.168.1.10 port 22: Connection timed out\r\n",
+    "unreachable": true
+}
+web2 | UNREACHABLE! => {
+    "changed": false,
+    "msg": "Data could not be sent to remote host \"192.168.1.11\". Make sure this host can be reached over ssh: ssh: connect to host 192.168.1.11 port 22: Connection timed out\r\n",
+    "unreachable": true
+}

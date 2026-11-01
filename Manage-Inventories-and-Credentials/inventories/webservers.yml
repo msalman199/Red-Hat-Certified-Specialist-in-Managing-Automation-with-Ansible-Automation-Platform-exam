@@ -1,0 +1,28 @@
+---
+# YAML-based inventory for web servers
+all:
+  children:
+    webservers:
+      hosts:
+        web1:
+          ansible_host: 192.168.1.10
+          ansible_user: ansible
+          server_id: web01
+          datacenter: east
+        web2:
+          ansible_host: 192.168.1.11
+          ansible_user: ansible
+          server_id: web02
+          datacenter: west
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+        http_port: 80
+        https_port: 443
+        server_role: webserver
+    production:
+      children:
+        webservers:
+      vars:
+        environment: prod
+        backup_enabled: true
+        monitoring_enabled: true
